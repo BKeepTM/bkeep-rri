@@ -3,6 +3,8 @@ package si.um.feri.projketRRI;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
+import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -18,7 +20,11 @@ import com.badlogic.gdx.maps.tiled.tiles.StaticTiledMapTile;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.ParticleEffect;
+
 
 import java.io.IOException;
 
@@ -39,14 +45,32 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
     private Texture[] mapTiles;
     private ZoomXY beginTile;   // top left tile
 
-    // center geolocation
-    private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.557314, 15.637771);
+    private SpriteBatch batch;
+    private Texture markerTexture;
 
-    // test marker
-    private final Geolocation MARKER_GEOLOCATION = new Geolocation(46.559070, 15.638100);
+    // center geolocation
+    private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.4845641435028, 15.649055286737594);
+
+    private final Array<Geolocation> markers = new Array<>();
+
+    private Array<ParticleEffect> beeEffects = new Array<>();
 
     @Override
     public void create() {
+
+        batch = new SpriteBatch();
+        markerTexture = new Texture(Gdx.files.internal("Images/hive.png"));
+
+        markers.add(new Geolocation(46.48818638420275, 15.646251042762158));
+        markers.add(new Geolocation(46.4845641435028, 15.649055286737594));
+
+        for (int i = 0; i < markers.size; i++) {
+            ParticleEffect e = new ParticleEffect();
+            e.load(Gdx.files.internal("Particles/beeSmall.p"), Gdx.files.internal(""));
+            e.start();
+            beeEffects.add(e);
+        }
+
         shapeRenderer = new ShapeRenderer();
 
         camera = new OrthographicCamera();
@@ -85,6 +109,23 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
         layers.add(layer);
 
         tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
+
+        InputMultiplexer mux = new InputMultiplexer();
+
+        // Gesture drag (pan) + pinch zoom (mostly mobile/trackpad)
+        mux.addProcessor(new GestureDetector(this));
+
+        // Mouse wheel zoom (desktop)
+        mux.addProcessor(new InputAdapter() {
+            @Override
+            public boolean scrolled(float amountX, float amountY) {
+                // amountY: +1 scroll down, -1 scroll up (usually)
+                camera.zoom += amountY * 0.1f;
+                return true;
+            }
+        });
+
+        Gdx.input.setInputProcessor(mux);
     }
 
     @Override
@@ -102,18 +143,34 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
     }
 
     private void drawMarkers() {
-        Vector2 marker = MapRasterTiles.getPixelPosition(MARKER_GEOLOCATION.lat, MARKER_GEOLOCATION.lng, beginTile.x, beginTile.y);
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
 
-        shapeRenderer.setProjectionMatrix(camera.combined);
-        shapeRenderer.setColor(Color.RED);
-        shapeRenderer.begin(ShapeRenderer.ShapeType.Filled);
-        shapeRenderer.circle(marker.x, marker.y, 10);
-        shapeRenderer.end();
+        float w = 64, h = 64;
+        float dt = Gdx.graphics.getDeltaTime();
+
+        for (int i = 0; i < markers.size; i++) {
+            Geolocation g = markers.get(i);
+            Vector2 p = MapRasterTiles.getPixelPosition(g.lat, g.lng, beginTile.x, beginTile.y);
+
+            batch.draw(markerTexture, p.x - w/2f, p.y - h/2f, w, h);
+
+            ParticleEffect e = beeEffects.get(i);
+            e.setPosition(p.x, p.y);
+            e.draw(batch, dt);
+
+            if (e.isComplete()) e.reset();
+        }
+
+        batch.end();
     }
 
     @Override
     public void dispose() {
         shapeRenderer.dispose();
+        batch.dispose();
+        markerTexture.dispose();
+        for (ParticleEffect e : beeEffects) e.dispose();
     }
 
     @Override
@@ -140,8 +197,8 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
 
     @Override
     public boolean pan(float x, float y, float deltaX, float deltaY) {
-        camera.translate(-deltaX, deltaY);
-        return false;
+        camera.translate(-deltaX * camera.zoom, deltaY * camera.zoom);
+        return true;
     }
 
     @Override
@@ -169,31 +226,23 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
     }
 
     private void handleInput() {
-        if (Gdx.input.isKeyPressed(Input.Keys.A)) {
-            camera.zoom += 0.02;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.Q)) {
-            camera.zoom -= 0.02;
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
-            camera.translate(-3, 0, 0);
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
-            camera.translate(3, 0, 0);
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.DOWN)) {
-            camera.translate(0, -3, 0);
-        }
-        if (Gdx.input.isKeyPressed(Input.Keys.UP)) {
-            camera.translate(0, 3, 0);
-        }
-
         camera.zoom = MathUtils.clamp(camera.zoom, 0.5f, 2f);
 
         float effectiveViewportWidth = camera.viewportWidth * camera.zoom;
         float effectiveViewportHeight = camera.viewportHeight * camera.zoom;
 
-        camera.position.x = MathUtils.clamp(camera.position.x, effectiveViewportWidth / 2f, Constants.MAP_WIDTH - effectiveViewportWidth / 2f);
-        camera.position.y = MathUtils.clamp(camera.position.y, effectiveViewportHeight / 2f, Constants.MAP_HEIGHT - effectiveViewportHeight / 2f);
+        camera.position.x = MathUtils.clamp(
+            camera.position.x,
+            effectiveViewportWidth / 2f,
+            Constants.MAP_WIDTH - effectiveViewportWidth / 2f
+        );
+
+        camera.position.y = MathUtils.clamp(
+            camera.position.y,
+            effectiveViewportHeight / 2f,
+            Constants.MAP_HEIGHT - effectiveViewportHeight / 2f
+        );
     }
+
+
 }
