@@ -5,6 +5,7 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
+import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -33,7 +34,7 @@ import si.um.feri.projketRRI.utils.Geolocation;
 import si.um.feri.projketRRI.utils.MapRasterTiles;
 import si.um.feri.projketRRI.utils.ZoomXY;
 
-public class RasterMap extends ApplicationAdapter implements GestureDetector.GestureListener {
+public class RasterMapScreen extends ScreenAdapter implements GestureDetector.GestureListener {
 
     private ShapeRenderer shapeRenderer;
     private Vector3 touchPosition;
@@ -56,7 +57,7 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
     private Array<ParticleEffect> beeEffects = new Array<>();
 
     @Override
-    public void create() {
+    public void show() {
 
         batch = new SpriteBatch();
         markerTexture = new Texture(Gdx.files.internal("Images/hive.png"));
@@ -129,25 +130,23 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
     }
 
     @Override
-    public void render() {
+    public void render(float delta) {
         ScreenUtils.clear(0, 0, 0, 1);
 
         handleInput();
-
         camera.update();
 
         tiledMapRenderer.setView(camera);
         tiledMapRenderer.render();
 
-        drawMarkers();
+        drawMarkers(delta);
     }
 
-    private void drawMarkers() {
+    private void drawMarkers(float dt) {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
 
         float w = 64, h = 64;
-        float dt = Gdx.graphics.getDeltaTime();
 
         for (int i = 0; i < markers.size; i++) {
             Geolocation g = markers.get(i);
@@ -167,10 +166,24 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
 
     @Override
     public void dispose() {
-        shapeRenderer.dispose();
-        batch.dispose();
-        markerTexture.dispose();
+        if (shapeRenderer != null) shapeRenderer.dispose();
+        if (batch != null) batch.dispose();
+        if (markerTexture != null) markerTexture.dispose();
+
+        if (tiledMap != null) tiledMap.dispose();
+
+        if (mapTiles != null) {
+            for (Texture t : mapTiles) if (t != null) t.dispose();
+        }
+
         for (ParticleEffect e : beeEffects) e.dispose();
+    }
+
+    @Override
+    public void hide() {
+        if (Gdx.input.getInputProcessor() != null) {
+            Gdx.input.setInputProcessor(null);
+        }
     }
 
     @Override
@@ -208,11 +221,9 @@ public class RasterMap extends ApplicationAdapter implements GestureDetector.Ges
 
     @Override
     public boolean zoom(float initialDistance, float distance) {
-        if (initialDistance >= distance)
-            camera.zoom += 0.02;
-        else
-            camera.zoom -= 0.02;
-        return false;
+        if (initialDistance >= distance) camera.zoom += 0.02f;
+        else camera.zoom -= 0.02f;
+        return true;
     }
 
     @Override
