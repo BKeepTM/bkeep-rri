@@ -1,0 +1,109 @@
+package si.um.feri.projketRRI.utils;
+
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.maps.MapLayers;
+import com.badlogic.gdx.maps.tiled.TiledMap;
+import com.badlogic.gdx.maps.tiled.TiledMapRenderer;
+import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
+import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
+import com.badlogic.gdx.maps.tiled.tiles.StaticTiledMapTile;
+import com.badlogic.gdx.utils.Disposable;
+
+import java.io.IOException;
+
+public class RasterTileMap implements Disposable {
+
+    private TiledMap tiledMap;
+    private TiledMapRenderer tiledMapRenderer;
+
+    private Texture[] mapTiles;
+    private ZoomXY beginTile; // top-left tile
+
+    private int tileZoom = 9;
+
+    public void rebuild(Geolocation centerGeolocation) {
+        // Dispose previous resources (IMPORTANT: dispose renderer too!)
+        disposeInternal();
+
+        try {
+            ZoomXY centerTile = MapRasterTiles.getTileNumber(centerGeolocation.lat, centerGeolocation.lng, tileZoom);
+            mapTiles = MapRasterTiles.getRasterTileZone(centerTile, Constants.NUM_TILES);
+
+            beginTile = new ZoomXY(
+                tileZoom,
+                centerTile.x - ((Constants.NUM_TILES - 1) / 2),
+                centerTile.y - ((Constants.NUM_TILES - 1) / 2)
+            );
+        } catch (IOException e) {
+            Gdx.app.log("MAP", "Failed to load tiles", e);
+            return;
+        }
+
+        tiledMap = new TiledMap();
+        MapLayers layers = tiledMap.getLayers();
+
+        TiledMapTileLayer layer = new TiledMapTileLayer(
+            Constants.NUM_TILES, Constants.NUM_TILES,
+            MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE
+        );
+
+        int index = 0;
+        for (int j = Constants.NUM_TILES - 1; j >= 0; j--) {
+            for (int i = 0; i < Constants.NUM_TILES; i++) {
+                TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
+                cell.setTile(new StaticTiledMapTile(new TextureRegion(
+                    mapTiles[index], MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE
+                )));
+                layer.setCell(i, j, cell);
+                index++;
+            }
+        }
+
+        layers.add(layer);
+        tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
+    }
+
+    public void render(OrthographicCamera camera) {
+        if (tiledMapRenderer == null) return;
+        tiledMapRenderer.setView(camera);
+        tiledMapRenderer.render();
+    }
+
+    public ZoomXY getBeginTile() {
+        return beginTile;
+    }
+
+    private void disposeInternal() {
+        if (tiledMapRenderer != null) {
+            // OrthogonalTiledMapRenderer is Disposable
+            ((OrthogonalTiledMapRenderer) tiledMapRenderer).dispose();
+            tiledMapRenderer = null;
+        }
+
+        if (tiledMap != null) {
+            tiledMap.dispose();
+            tiledMap = null;
+        }
+
+        if (mapTiles != null) {
+            for (Texture t : mapTiles) if (t != null) t.dispose();
+            mapTiles = null;
+        }
+    }
+
+    public void setTileZoom(int tileZoom) {
+        this.tileZoom = tileZoom;
+    }
+
+    public int getTileZoom() {
+        return tileZoom;
+    }
+
+    @Override
+    public void dispose() {
+        disposeInternal();
+    }
+}

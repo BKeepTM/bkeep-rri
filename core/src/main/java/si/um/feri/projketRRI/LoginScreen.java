@@ -114,6 +114,7 @@ public class LoginScreen extends ScreenAdapter {
         root.add(usernameField).growX().row();
         root.add(new Label("Password:", skin)).left().padRight(15).padTop(10);
         root.add(passwordField).growX().padTop(10).row();
+        loginButton.setColor(0.2f, 0.6f, 1f, 1f);
         root.add(loginButton).colspan(2).padTop(20).width(500).row();
         root.add(statusLabel).colspan(2).padTop(10).width(500).row();
 
