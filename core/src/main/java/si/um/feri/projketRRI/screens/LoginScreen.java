@@ -1,4 +1,4 @@
-package si.um.feri.projketRRI;
+package si.um.feri.projketRRI.screens;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Preferences;
@@ -6,8 +6,6 @@ import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.Net;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.net.HttpRequestBuilder;
-import com.badlogic.gdx.net.HttpParametersUtils;
-import com.badlogic.gdx.net.HttpStatus;
 import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.utils.Align;
@@ -17,8 +15,7 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
 
-import java.util.HashMap;
-import java.util.Map;
+import si.um.feri.projketRRI.Projekt;
 
 public class LoginScreen extends ScreenAdapter {
 

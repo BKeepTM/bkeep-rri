@@ -1,4 +1,7 @@
-package si.um.feri.projketRRI.utils.api;
+package si.um.feri.projketRRI.api.calls;
+
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Preferences;
 import com.google.gson.FieldNamingPolicy;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -11,15 +14,19 @@ import okhttp3.Response;
 import java.io.IOException;
 import java.lang.reflect.Type;
 import java.util.List;
-import si.um.feri.projketRRI.utils.api.model.Hive;
-import si.um.feri.projketRRI.utils.api.model.Notification;
+
+import si.um.feri.projketRRI.api.calls.model.Hive;
+import si.um.feri.projketRRI.api.calls.model.Notification;
 
 public class ApiClient {
 
     private static final String API_URL = "https://pi.darkosever.si";
     private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
     private static final OkHttpClient client = new OkHttpClient();
-    public static String token;
+    private static final String PREFS = "auth";
+
+    static Preferences prefs = Gdx.app.getPreferences(PREFS);
+    static String token = prefs.getString("token", "");
     private static final Gson gson = new GsonBuilder()
         .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
         .create();
@@ -60,47 +67,6 @@ public class ApiClient {
             .url(API_URL + "/hive/" + id)
             .header("Authorization", "Bearer " + token)
             .get()
-            .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
-
-            String responseBody = response.body().string();
-            return gson.fromJson(responseBody, Hive.class);
-        }
-    }
-    public static Hive createHive(String name, String type, String status,
-                                  float longitude, float latitude, String location) throws IOException {
-        Hive payload = new Hive(-1, name, location,type, status,longitude,latitude,-1,-1);
-        String jsonBody = gson.toJson(payload);
-
-        RequestBody body = RequestBody.create(jsonBody, JSON_MEDIA_TYPE);
-
-        Request request = new Request.Builder()
-            .url(API_URL + "/hive")
-            .header("Authorization", "Bearer " + token)
-            .post(body)
-            .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IOException("Unexpected code " + response);
-
-            String responseBody = response.body().string();
-            return gson.fromJson(responseBody, Hive.class);
-        }
-    }
-
-    public static Hive updateHive(int id, String name, String type, String status,
-                                  String location) throws IOException {
-        Hive payload = new Hive(id, name, location, status, type,0.0f,0.0f, -1,-1);
-        String jsonBody = gson.toJson(payload);
-
-        RequestBody body = RequestBody.create(jsonBody, JSON_MEDIA_TYPE);
-
-        Request request = new Request.Builder()
-            .url(API_URL + "/hive/" + id)
-            .header("Authorization", "Bearer " + token)
-            .put(body)
             .build();
 
         try (Response response = client.newCall(request).execute()) {

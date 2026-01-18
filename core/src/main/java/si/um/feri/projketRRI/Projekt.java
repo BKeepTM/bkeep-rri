@@ -1,9 +1,8 @@
 package si.um.feri.projketRRI;
-import com.badlogic.gdx.Game;
 import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.Gdx;
 
-import si.um.feri.projketRRI.LoginScreen;
+import si.um.feri.projketRRI.screens.LoginScreen;
 
 public class Projekt extends com.badlogic.gdx.Game {
     public Skin skin;

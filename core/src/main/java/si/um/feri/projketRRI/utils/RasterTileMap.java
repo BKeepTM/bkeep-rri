@@ -56,12 +56,13 @@ public class RasterTileMap implements Disposable {
         int index = 0;
         for (int j = numTiles - 1; j >= 0; j--) {
             for (int i = 0; i < numTiles; i++) {
+                Texture tex = mapTiles[index++];
+
+                if (tex == null) continue;
+
                 TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
-                cell.setTile(new StaticTiledMapTile(new TextureRegion(
-                    mapTiles[index], MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE
-                )));
+                cell.setTile(new StaticTiledMapTile(new TextureRegion(tex)));
                 layer.setCell(i, j, cell);
-                index++;
             }
         }
 

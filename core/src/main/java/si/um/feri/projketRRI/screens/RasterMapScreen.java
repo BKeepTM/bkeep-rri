@@ -1,4 +1,4 @@
-package si.um.feri.projketRRI;
+package si.um.feri.projketRRI.screens;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputAdapter;
@@ -13,18 +13,19 @@ import com.badlogic.gdx.utils.IntMap;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 
-import si.um.feri.projketRRI.ApiCalls.HiveService;
-import si.um.feri.projketRRI.ApiCalls.LocationService;
-import si.um.feri.projketRRI.Models.Hive;
-import si.um.feri.projketRRI.Models.Location;
+import si.um.feri.projketRRI.Projekt;
+import si.um.feri.projketRRI.api.calls.HiveService;
+import si.um.feri.projketRRI.api.calls.HiveWeightService;
+import si.um.feri.projketRRI.api.calls.LocationService;
+import si.um.feri.projketRRI.api.calls.model.Hive;
+import si.um.feri.projketRRI.api.calls.model.Location;
 import si.um.feri.projketRRI.utils.CameraInputController;
 import si.um.feri.projketRRI.utils.Constants;
-import si.um.feri.projketRRI.utils.DetailPanel;
-import si.um.feri.projketRRI.utils.HiveDetailMapScreen;
 import si.um.feri.projketRRI.utils.Geolocation;
 import si.um.feri.projketRRI.utils.MapRasterTiles;
 import si.um.feri.projketRRI.utils.MarkerLayer;
 import si.um.feri.projketRRI.utils.RasterTileMap;
+import si.um.feri.projketRRI.api.calls.model.HiveWeight;
 
 public class RasterMapScreen extends ScreenAdapter implements GestureDetector.GestureListener {
 
@@ -50,6 +51,9 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private final int ZOOM_BG = 9;
 
     private Geolocation selectedMarker = null;
+
+    private IntMap<Array<HiveWeight>> weightsByHiveId = new IntMap<>();
+    private boolean weightsLoading = false;
 
     public RasterMapScreen(Projekt game) {
         this.game = game;
@@ -160,24 +164,48 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         });
     }
 
+    private void loadHiveWeightsAsync() {
+        weightsLoading = true;
+
+        new Thread(() -> {
+            try {
+                IntMap<Array<HiveWeight>> grouped = HiveWeightService.loadGroupedByHive();
+
+                Gdx.app.postRunnable(() -> {
+                    weightsByHiveId.clear();
+                    weightsByHiveId.putAll(grouped);
+                    weightsLoading = false;
+
+                    Gdx.app.log("WEIGHTS", "Loaded weights for hives: " + weightsByHiveId.size);
+                });
+
+            } catch (Exception e) {
+                Gdx.app.postRunnable(() -> {
+                    weightsLoading = false;
+                    Gdx.app.log("WEIGHTS", "Failed to load hive weights: " + e.getMessage(), e);
+                });
+            }
+        }).start();
+    }
+
+
     private void onAllLocationsLoaded() {
         loading = false;
         rebuildMarkersFromLocations();
 
         if (markers.size > 0) {
             centerOnMarkersAverage();
+            tileMap.setTileZoom(ZOOM_BG);
             tileMap.rebuild(centerGeolocation);
         }
 
-        // update particles count in one go
         markerLayer.syncParticlesToMarkers(markers.size);
 
-        tileMap.setTileZoom(ZOOM_BG);
-        tileMap.rebuild(centerGeolocation);
-
+        loadHiveWeightsAsync();
 
         Gdx.app.log("MAP", "Markers on map: " + markers.size);
     }
+
 
     private void rebuildMarkersFromLocations() {
         markers.clear();
@@ -196,7 +224,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     }
 
     private void clampCameraToMap() {
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.3f, 2f);
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.5f, 2f);
 
         float mapPixelWidth = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
         float mapPixelHeight = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
@@ -224,7 +252,12 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
         float hitRadius = 40f;
 
-        for (Geolocation g : markers) {
+        for (Hive hive : hives) {
+            Location loc = locationsById.get(hive.id_location);
+            if (loc == null) continue;
+
+            Geolocation g = new Geolocation(loc.latitude, loc.longitude);
+
             Vector2 p = MapRasterTiles.getPixelPosition(
                 g.lat, g.lng,
                 tileMap.getBeginTile().x,
@@ -232,15 +265,23 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
             );
 
             if (p.dst(world.x, world.y) <= hitRadius) {
-                openHiveDetail(g);
+                openHiveDetail(hive, loc);
                 return true;
             }
         }
         return false;
     }
 
-    private void openHiveDetail(Geolocation hiveLocation) {
-        game.setScreen(new HiveDetailMapScreen(game, hiveLocation, markers));
+    private void openHiveDetail(Hive hive, Location loc) {
+        Array<HiveWeight> weights = weightsByHiveId.get(hive.id);
+
+        if (weights == null) {
+            weights = new Array<>();
+        }
+
+        game.setScreen(
+            new HiveDetailMapScreen(game, hive, loc,markers, weights)
+        );
     }
 
     @Override public boolean touchDown(float x, float y, int pointer, int button) { return false; }
