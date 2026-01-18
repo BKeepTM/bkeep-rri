@@ -1,79 +1,62 @@
 package si.um.feri.projketRRI;
 
-import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.ScreenAdapter;
-import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.OrthographicCamera;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.input.GestureDetector;
-import com.badlogic.gdx.maps.MapLayers;
-import com.badlogic.gdx.maps.tiled.TiledMap;
-import com.badlogic.gdx.maps.tiled.TiledMapRenderer;
-import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
-import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
-import com.badlogic.gdx.maps.tiled.tiles.StaticTiledMapTile;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.IntMap;
 import com.badlogic.gdx.utils.ScreenUtils;
-import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.g2d.ParticleEffect;
+import com.badlogic.gdx.graphics.OrthographicCamera;
 
-
-import java.io.IOException;
-
+import si.um.feri.projketRRI.ApiCalls.HiveService;
+import si.um.feri.projketRRI.ApiCalls.LocationService;
+import si.um.feri.projketRRI.Models.Hive;
+import si.um.feri.projketRRI.Models.Location;
+import si.um.feri.projketRRI.utils.CameraInputController;
 import si.um.feri.projketRRI.utils.Constants;
+import si.um.feri.projketRRI.utils.DetailPanel;
+import si.um.feri.projketRRI.utils.HiveDetailMapScreen;
 import si.um.feri.projketRRI.utils.Geolocation;
 import si.um.feri.projketRRI.utils.MapRasterTiles;
-import si.um.feri.projketRRI.utils.ZoomXY;
+import si.um.feri.projketRRI.utils.MarkerLayer;
+import si.um.feri.projketRRI.utils.RasterTileMap;
 
 public class RasterMapScreen extends ScreenAdapter implements GestureDetector.GestureListener {
 
-    private ShapeRenderer shapeRenderer;
-    private Vector3 touchPosition;
+    private final Projekt game;
 
-    private TiledMap tiledMap;
-    private TiledMapRenderer tiledMapRenderer;
     private OrthographicCamera camera;
 
-    private Texture[] mapTiles;
-    private ZoomXY beginTile;   // top left tile
-
-    private SpriteBatch batch;
-    private Texture markerTexture;
-
     // center geolocation
-    private final Geolocation CENTER_GEOLOCATION = new Geolocation(46.4845641435028, 15.649055286737594);
+    private Geolocation centerGeolocation = new Geolocation(46.4845641435028, 15.649055286737594);
 
+    // data
+    private final Array<Hive> hives = new Array<>();
+    private final IntMap<Location> locationsById = new IntMap<>();
     private final Array<Geolocation> markers = new Array<>();
+    private int pendingLocations = 0;
+    private boolean loading = false;
 
-    private Array<ParticleEffect> beeEffects = new Array<>();
+    // helpers
+    private RasterTileMap tileMap;
+    private MarkerLayer markerLayer;
+    private CameraInputController cameraController;
+
+    private final int ZOOM_BG = 9;
+
+    private Geolocation selectedMarker = null;
+
+    public RasterMapScreen(Projekt game) {
+        this.game = game;
+    }
 
     @Override
     public void show() {
-
-        batch = new SpriteBatch();
-        markerTexture = new Texture(Gdx.files.internal("Images/hive.png"));
-
-        markers.add(new Geolocation(46.48818638420275, 15.646251042762158));
-        markers.add(new Geolocation(46.4845641435028, 15.649055286737594));
-
-        for (int i = 0; i < markers.size; i++) {
-            ParticleEffect e = new ParticleEffect();
-            e.load(Gdx.files.internal("Particles/beeSmall.p"), Gdx.files.internal(""));
-            e.start();
-            beeEffects.add(e);
-        }
-
-        shapeRenderer = new ShapeRenderer();
-
         camera = new OrthographicCamera();
         camera.setToOrtho(false, Constants.MAP_WIDTH, Constants.MAP_HEIGHT);
         camera.position.set(Constants.MAP_WIDTH / 2f, Constants.MAP_HEIGHT / 2f, 0);
@@ -82,162 +65,141 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         camera.zoom = 2f;
         camera.update();
 
-        touchPosition = new Vector3();
+        tileMap = new RasterTileMap();
+        tileMap.setTileZoom(ZOOM_BG);
 
-        try {
-            //in most cases, geolocation won't be in the center of the tile because tile borders are predetermined (geolocation can be at the corner of a tile)
-            ZoomXY centerTile = MapRasterTiles.getTileNumber(CENTER_GEOLOCATION.lat, CENTER_GEOLOCATION.lng, Constants.ZOOM);
-            mapTiles = MapRasterTiles.getRasterTileZone(centerTile, Constants.NUM_TILES);
-            //you need the beginning tile (tile on the top left corner) to convert geolocation to a location in pixels.
-            beginTile = new ZoomXY(Constants.ZOOM, centerTile.x - ((Constants.NUM_TILES - 1) / 2), centerTile.y - ((Constants.NUM_TILES - 1) / 2));
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        markerLayer = new MarkerLayer("Images/hive.png", "Particles/beeSmall.p");
+        markerLayer.setMapParams(ZOOM_BG, Constants.NUM_TILES);
+        cameraController = new CameraInputController(camera);
 
-        tiledMap = new TiledMap();
-        MapLayers layers = tiledMap.getLayers();
-
-        TiledMapTileLayer layer = new TiledMapTileLayer(Constants.NUM_TILES, Constants.NUM_TILES, MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE);
-        int index = 0;
-        for (int j = Constants.NUM_TILES - 1; j >= 0; j--) {
-            for (int i = 0; i < Constants.NUM_TILES; i++) {
-                TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
-                cell.setTile(new StaticTiledMapTile(new TextureRegion(mapTiles[index], MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE)));
-                layer.setCell(i, j, cell);
-                index++;
-            }
-        }
-        layers.add(layer);
-
-        tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
+        tileMap.rebuild(centerGeolocation);
 
         InputMultiplexer mux = new InputMultiplexer();
 
-        // Gesture drag (pan) + pinch zoom (mostly mobile/trackpad)
         mux.addProcessor(new GestureDetector(this));
 
-        // Mouse wheel zoom (desktop)
+        mux.addProcessor(new GestureDetector(cameraController));
+
         mux.addProcessor(new InputAdapter() {
             @Override
             public boolean scrolled(float amountX, float amountY) {
-                // amountY: +1 scroll down, -1 scroll up (usually)
-                camera.zoom += amountY * 0.1f;
+                camera.zoom += amountY * 0.2f;
                 return true;
             }
         });
 
         Gdx.input.setInputProcessor(mux);
+
+        loadHivesAndLocations();
     }
 
     @Override
     public void render(float delta) {
         ScreenUtils.clear(0, 0, 0, 1);
 
-        handleInput();
+        clampCameraToMap();
         camera.update();
 
-        tiledMapRenderer.setView(camera);
-        tiledMapRenderer.render();
-
-        drawMarkers(delta);
+        tileMap.render(camera);
+        markerLayer.draw(camera, tileMap.getBeginTile(), markers, delta);
     }
 
-    private void drawMarkers(float dt) {
-        batch.setProjectionMatrix(camera.combined);
-        batch.begin();
+    private void loadHivesAndLocations() {
+        loading = true;
+        hives.clear();
+        locationsById.clear();
+        markers.clear();
 
-        float w = 64, h = 64;
+        HiveService.loadHives(new HiveService.HiveCallback() {
+            @Override
+            public void onSuccess(Array<Hive> result) {
+                hives.addAll(result);
 
-        for (int i = 0; i < markers.size; i++) {
-            Geolocation g = markers.get(i);
-            Vector2 p = MapRasterTiles.getPixelPosition(g.lat, g.lng, beginTile.x, beginTile.y);
+                if (hives.size == 0) {
+                    loading = false;
+                    Gdx.app.log("HIVES", "No hives returned.");
+                    return;
+                }
 
-            batch.draw(markerTexture, p.x - w/2f, p.y - h/2f, w, h);
+                pendingLocations = 0;
 
-            ParticleEffect e = beeEffects.get(i);
-            e.setPosition(p.x, p.y);
-            e.draw(batch, dt);
+                for (Hive hive : hives) {
+                    final int locId = hive.id_location;
 
-            if (e.isComplete()) e.reset();
+                    if (locationsById.containsKey(locId)) continue;
+
+                    pendingLocations++;
+
+                    LocationService.loadLocation(locId, new LocationService.LocationCallback() {
+                        @Override
+                        public void onSuccess(Location location) {
+                            locationsById.put(location.id, location);
+                            pendingLocations--;
+                            if (pendingLocations == 0) onAllLocationsLoaded();
+                        }
+
+                        @Override
+                        public void onError(String message) {
+                            pendingLocations--;
+                            Gdx.app.log("LOCATIONS", "Failed for id=" + locId + " : " + message);
+                            if (pendingLocations == 0) onAllLocationsLoaded();
+                        }
+                    });
+                }
+
+                if (pendingLocations == 0) {
+                    onAllLocationsLoaded();
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                loading = false;
+                Gdx.app.log("HIVES", "Load hives failed: " + message);
+            }
+        });
+    }
+
+    private void onAllLocationsLoaded() {
+        loading = false;
+        rebuildMarkersFromLocations();
+
+        if (markers.size > 0) {
+            centerOnMarkersAverage();
+            tileMap.rebuild(centerGeolocation);
         }
 
-        batch.end();
+        // update particles count in one go
+        markerLayer.syncParticlesToMarkers(markers.size);
+
+        tileMap.setTileZoom(ZOOM_BG);
+        tileMap.rebuild(centerGeolocation);
+
+
+        Gdx.app.log("MAP", "Markers on map: " + markers.size);
     }
 
-    @Override
-    public void dispose() {
-        if (shapeRenderer != null) shapeRenderer.dispose();
-        if (batch != null) batch.dispose();
-        if (markerTexture != null) markerTexture.dispose();
+    private void rebuildMarkersFromLocations() {
+        markers.clear();
 
-        if (tiledMap != null) tiledMap.dispose();
-
-        if (mapTiles != null) {
-            for (Texture t : mapTiles) if (t != null) t.dispose();
-        }
-
-        for (ParticleEffect e : beeEffects) e.dispose();
-    }
-
-    @Override
-    public void hide() {
-        if (Gdx.input.getInputProcessor() != null) {
-            Gdx.input.setInputProcessor(null);
+        for (Hive hive : hives) {
+            Location loc = locationsById.get(hive.id_location);
+            if (loc == null) continue;
+            markers.add(new Geolocation(loc.latitude, loc.longitude));
         }
     }
 
-    @Override
-    public boolean touchDown(float x, float y, int pointer, int button) {
-        touchPosition.set(x, y, 0);
-        camera.unproject(touchPosition);
-        return false;
+    private void centerOnMarkersAverage() {
+        double sumLat = 0, sumLng = 0;
+        for (Geolocation m : markers) { sumLat += m.lat; sumLng += m.lng; }
+        centerGeolocation = new Geolocation(sumLat / markers.size, sumLng / markers.size);
     }
 
-    @Override
-    public boolean tap(float x, float y, int count, int button) {
-        return false;
-    }
+    private void clampCameraToMap() {
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.3f, 2f);
 
-    @Override
-    public boolean longPress(float x, float y) {
-        return false;
-    }
-
-    @Override
-    public boolean fling(float velocityX, float velocityY, int button) {
-        return false;
-    }
-
-    @Override
-    public boolean pan(float x, float y, float deltaX, float deltaY) {
-        camera.translate(-deltaX * camera.zoom, deltaY * camera.zoom);
-        return true;
-    }
-
-    @Override
-    public boolean panStop(float x, float y, int pointer, int button) {
-        return false;
-    }
-
-    @Override
-    public boolean zoom(float initialDistance, float distance) {
-        if (initialDistance >= distance) camera.zoom += 0.02f;
-        else camera.zoom -= 0.02f;
-        return true;
-    }
-
-    @Override
-    public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) {
-        return false;
-    }
-
-    @Override
-    public void pinchStop() {
-
-    }
-
-    private void handleInput() {
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.5f, 2f);
+        float mapPixelWidth = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
+        float mapPixelHeight = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
 
         float effectiveViewportWidth = camera.viewportWidth * camera.zoom;
         float effectiveViewportHeight = camera.viewportHeight * camera.zoom;
@@ -245,15 +207,59 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         camera.position.x = MathUtils.clamp(
             camera.position.x,
             effectiveViewportWidth / 2f,
-            Constants.MAP_WIDTH - effectiveViewportWidth / 2f
+            mapPixelWidth - effectiveViewportWidth / 2f
         );
 
         camera.position.y = MathUtils.clamp(
             camera.position.y,
             effectiveViewportHeight / 2f,
-            Constants.MAP_HEIGHT - effectiveViewportHeight / 2f
+            mapPixelHeight - effectiveViewportHeight / 2f
         );
     }
 
+    @Override
+    public boolean tap(float x, float y, int count, int button) {
+        Vector3 world = new Vector3(x, y, 0);
+        camera.unproject(world);
 
+        float hitRadius = 40f;
+
+        for (Geolocation g : markers) {
+            Vector2 p = MapRasterTiles.getPixelPosition(
+                g.lat, g.lng,
+                tileMap.getBeginTile().x,
+                tileMap.getBeginTile().y
+            );
+
+            if (p.dst(world.x, world.y) <= hitRadius) {
+                openHiveDetail(g);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void openHiveDetail(Geolocation hiveLocation) {
+        game.setScreen(new HiveDetailMapScreen(game, hiveLocation, markers));
+    }
+
+    @Override public boolean touchDown(float x, float y, int pointer, int button) { return false; }
+    @Override public boolean longPress(float x, float y) { return false; }
+    @Override public boolean fling(float velocityX, float velocityY, int button) { return false; }
+    @Override public boolean pan(float x, float y, float deltaX, float deltaY) { return false; }
+    @Override public boolean panStop(float x, float y, int pointer, int button) { return false; }
+    @Override public boolean zoom(float initialDistance, float distance) { return false; }
+    @Override public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) { return false; }
+    @Override public void pinchStop() { }
+
+    @Override
+    public void hide() {
+        Gdx.input.setInputProcessor(null);
+    }
+
+    @Override
+    public void dispose() {
+        if (markerLayer != null) markerLayer.dispose();
+        if (tileMap != null) tileMap.dispose();
+    }
 }

@@ -17,6 +17,13 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.files.FileHandle;
+
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.security.MessageDigest;
+import java.util.Locale;
 
 
 public class MapRasterTiles {
@@ -80,26 +87,23 @@ public class MapRasterTiles {
      * @return
      * @throws IOException
      */
-    public static Texture[] getRasterTileZone(ZoomXY zoomXY, int size) throws IOException {
+    public static Texture[] getRasterTileZone(ZoomXY center, int size) throws IOException {
         Texture[] array = new Texture[size * size];
-        int[] factorY = new int[size * size]; //if size is 3 {-1, -1, -1, 0, 0, 0, 1, 1, 1};
-        int[] factorX = new int[size * size]; //if size is 3 {-1, 0, 1, -1, 0, 1, -1, 0, 1};
+        int half = (size - 1) / 2;
 
-        int value = (size - 1) / -2;
-        for (int i = 0; i < size; i++) {
-            for (int j = 0; j < size; j++) {
-                factorY[i * size + j] = value;
-                factorX[i + j * size] = value;
+        int index = 0;
+        for (int row = -half; row <= half; row++) {
+            for (int col = -half; col <= half; col++) {
+                int tx = center.x + col;
+                int ty = center.y + row;
+
+                array[index++] = getRasterTile(center.zoom, tx, ty);
+                System.out.println(center.zoom + "/" + tx + "/" + ty);
             }
-            value++;
-        }
-
-        for (int i = 0; i < size * size; i++) {
-            array[i] = getRasterTile(zoomXY.zoom, zoomXY.x + factorX[i], zoomXY.y + factorY[i]);
-            System.out.println(zoomXY.zoom + "/" + (zoomXY.x + factorX[i]) + "/" + (zoomXY.y + factorY[i]));
         }
         return array;
     }
+
 
     /**
      * Gets tile from provided URL and returns it as ByteArrayOutputStream.
@@ -127,7 +131,10 @@ public class MapRasterTiles {
      * @return
      */
     public static Texture getTexture(byte[] array) {
-        return new Texture(new Pixmap(array, 0, array.length));
+        Pixmap pix = new Pixmap(array, 0, array.length);
+        Texture tex = new Texture(pix);
+        pix.dispose();
+        return tex;
     }
 
     //https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames#Java
@@ -200,6 +207,16 @@ public class MapRasterTiles {
         return new Vector2(
                 (int) (Math.floor(worldCoordinate[0] * scale) - (beginTileX * tileSize)),
                 height - (int) (Math.floor(worldCoordinate[1] * scale) - (beginTileY * tileSize) - 1)
+        );
+    }
+
+    public static Vector2 getPixelPosition(double lat, double lng, int beginTileX, int beginTileY, int zoom, int mapHeightPx) {
+        double[] worldCoordinate = project(lat, lng, MapRasterTiles.TILE_SIZE);
+        double scale = Math.pow(2, zoom);
+
+        return new Vector2(
+            (float) (Math.floor(worldCoordinate[0] * scale) - (beginTileX * MapRasterTiles.TILE_SIZE)),
+            (float) (mapHeightPx - (Math.floor(worldCoordinate[1] * scale) - (beginTileY * MapRasterTiles.TILE_SIZE) - 1))
         );
     }
 
@@ -299,4 +316,23 @@ public class MapRasterTiles {
             return null;
         }
     }
+
+    public static void prefetchRasterTile(int zoom, int x, int y) throws IOException {
+        // This should download/save the tile image to your cache location,
+        // but must NOT call new Texture() or any GL code.
+        // If your getRasterTile(...) already downloads to disk, split it:
+        // - downloadToCache(...)
+        // - loadTextureFromCache(...) (GL thread only)
+    }
+
+
+    public static void prefetchRasterTileZone(ZoomXY center, int numTiles) throws IOException {
+        int half = (numTiles - 1) / 2;
+        for (int dy = -half; dy <= half; dy++) {
+            for (int dx = -half; dx <= half; dx++) {
+                prefetchRasterTile(center.zoom, center.x + dx, center.y + dy);
+            }
+        }
+    }
+
 }
