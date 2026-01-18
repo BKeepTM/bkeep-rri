@@ -22,7 +22,7 @@ import java.util.Map;
 
 public class LoginScreen extends ScreenAdapter {
 
-    private static final String API_URL = "https://pi.darkosever.si";
+    private static final String API_URL = "http://localhost:3000"; //"https://pi.darkosever.si";
     private static final String TOKEN_PREFS = "auth";
     private static final String TOKEN_KEY = "token";
 
@@ -62,7 +62,7 @@ public class LoginScreen extends ScreenAdapter {
 
         String token = Gdx.app.getPreferences("auth").getString("token", "");
         if (!token.isEmpty()) {
-            projekt.setScreen(new RasterMapScreen());
+            projekt.setScreen(new RasterMapScreen(projekt));
             dispose();
         }
 
@@ -175,7 +175,7 @@ public class LoginScreen extends ScreenAdapter {
                             saveToken(token);
                             statusLabel.setText("Login uspešen! Token shranjen.");
 
-                            projekt.setScreen(new RasterMapScreen());
+                            projekt.setScreen(new RasterMapScreen(projekt));
                             dispose();
 
                         } catch (Exception e) {

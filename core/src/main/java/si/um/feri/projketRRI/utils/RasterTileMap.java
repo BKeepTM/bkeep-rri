@@ -24,18 +24,21 @@ public class RasterTileMap implements Disposable {
 
     private int tileZoom = 9;
 
+    private int numTiles = Constants.NUM_TILES;
+    public void setNumTiles(int n) { this.numTiles = n; }
+
     public void rebuild(Geolocation centerGeolocation) {
         // Dispose previous resources (IMPORTANT: dispose renderer too!)
         disposeInternal();
 
         try {
             ZoomXY centerTile = MapRasterTiles.getTileNumber(centerGeolocation.lat, centerGeolocation.lng, tileZoom);
-            mapTiles = MapRasterTiles.getRasterTileZone(centerTile, Constants.NUM_TILES);
+            mapTiles = MapRasterTiles.getRasterTileZone(centerTile, numTiles);
 
             beginTile = new ZoomXY(
                 tileZoom,
-                centerTile.x - ((Constants.NUM_TILES - 1) / 2),
-                centerTile.y - ((Constants.NUM_TILES - 1) / 2)
+                centerTile.x - ((numTiles - 1) / 2),
+                centerTile.y - ((numTiles - 1) / 2)
             );
         } catch (IOException e) {
             Gdx.app.log("MAP", "Failed to load tiles", e);
@@ -46,13 +49,13 @@ public class RasterTileMap implements Disposable {
         MapLayers layers = tiledMap.getLayers();
 
         TiledMapTileLayer layer = new TiledMapTileLayer(
-            Constants.NUM_TILES, Constants.NUM_TILES,
+            numTiles, numTiles,
             MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE
         );
 
         int index = 0;
-        for (int j = Constants.NUM_TILES - 1; j >= 0; j--) {
-            for (int i = 0; i < Constants.NUM_TILES; i++) {
+        for (int j = numTiles - 1; j >= 0; j--) {
+            for (int i = 0; i < numTiles; i++) {
                 TiledMapTileLayer.Cell cell = new TiledMapTileLayer.Cell();
                 cell.setTile(new StaticTiledMapTile(new TextureRegion(
                     mapTiles[index], MapRasterTiles.TILE_SIZE, MapRasterTiles.TILE_SIZE

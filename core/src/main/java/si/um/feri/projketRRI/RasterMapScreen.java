@@ -20,14 +20,15 @@ import si.um.feri.projketRRI.Models.Location;
 import si.um.feri.projketRRI.utils.CameraInputController;
 import si.um.feri.projketRRI.utils.Constants;
 import si.um.feri.projketRRI.utils.DetailPanel;
-import si.um.feri.projketRRI.utils.LazyDetailPatchLayer;
+import si.um.feri.projketRRI.utils.HiveDetailMapScreen;
 import si.um.feri.projketRRI.utils.Geolocation;
 import si.um.feri.projketRRI.utils.MapRasterTiles;
 import si.um.feri.projketRRI.utils.MarkerLayer;
 import si.um.feri.projketRRI.utils.RasterTileMap;
-import si.um.feri.projketRRI.utils.api.ApiClient;
 
-public class RasterMapScreen extends ScreenAdapter {
+public class RasterMapScreen extends ScreenAdapter implements GestureDetector.GestureListener {
+
+    private final Projekt game;
 
     private OrthographicCamera camera;
 
@@ -38,7 +39,6 @@ public class RasterMapScreen extends ScreenAdapter {
     private final Array<Hive> hives = new Array<>();
     private final IntMap<Location> locationsById = new IntMap<>();
     private final Array<Geolocation> markers = new Array<>();
-
     private int pendingLocations = 0;
     private boolean loading = false;
 
@@ -47,20 +47,16 @@ public class RasterMapScreen extends ScreenAdapter {
     private MarkerLayer markerLayer;
     private CameraInputController cameraController;
 
-    private LazyDetailPatchLayer detailLayer;
     private final int ZOOM_BG = 9;
-    private final int ZOOM_PATCH = 15;
-    private final int PATCH_TILES = 3;
 
     private Geolocation selectedMarker = null;
-    private DetailPanel detailPanel;
+
+    public RasterMapScreen(Projekt game) {
+        this.game = game;
+    }
 
     @Override
     public void show() {
-        // camera
-
-        detailLayer = new LazyDetailPatchLayer(ZOOM_PATCH, PATCH_TILES);
-
         camera = new OrthographicCamera();
         camera.setToOrtho(false, Constants.MAP_WIDTH, Constants.MAP_HEIGHT);
         camera.position.set(Constants.MAP_WIDTH / 2f, Constants.MAP_HEIGHT / 2f, 0);
@@ -69,24 +65,29 @@ public class RasterMapScreen extends ScreenAdapter {
         camera.zoom = 2f;
         camera.update();
 
-        // helpers
         tileMap = new RasterTileMap();
+        tileMap.setTileZoom(ZOOM_BG);
+
         markerLayer = new MarkerLayer("Images/hive.png", "Particles/beeSmall.p");
+        markerLayer.setMapParams(ZOOM_BG, Constants.NUM_TILES);
         cameraController = new CameraInputController(camera);
 
-        // initial tiles
         tileMap.rebuild(centerGeolocation);
 
-        // input
         InputMultiplexer mux = new InputMultiplexer();
+
+        mux.addProcessor(new GestureDetector(this));
+
         mux.addProcessor(new GestureDetector(cameraController));
+
         mux.addProcessor(new InputAdapter() {
             @Override
             public boolean scrolled(float amountX, float amountY) {
-                camera.zoom += amountY * 0.1f;
+                camera.zoom += amountY * 0.2f;
                 return true;
             }
         });
+
         Gdx.input.setInputProcessor(mux);
 
         loadHivesAndLocations();
@@ -100,18 +101,6 @@ public class RasterMapScreen extends ScreenAdapter {
         camera.update();
 
         tileMap.render(camera);
-
-        for (int i = 0; i < markers.size; i++) {
-            Geolocation g = markers.get(i);
-            if (isMarkerNearView(g)) {
-                detailLayer.requestPatchIfNeeded(g);
-            }
-        }
-
-        detailLayer.updateLoading();
-
-        detailLayer.draw(camera, tileMap.getBeginTile(), ZOOM_BG);
-
         markerLayer.draw(camera, tileMap.getBeginTile(), markers, delta);
     }
 
@@ -137,7 +126,6 @@ public class RasterMapScreen extends ScreenAdapter {
                 for (Hive hive : hives) {
                     final int locId = hive.id_location;
 
-                    // avoid duplicate calls
                     if (locationsById.containsKey(locId)) continue;
 
                     pendingLocations++;
@@ -159,7 +147,6 @@ public class RasterMapScreen extends ScreenAdapter {
                     });
                 }
 
-                // if all were duplicates / already cached
                 if (pendingLocations == 0) {
                     onAllLocationsLoaded();
                 }
@@ -188,25 +175,8 @@ public class RasterMapScreen extends ScreenAdapter {
         tileMap.setTileZoom(ZOOM_BG);
         tileMap.rebuild(centerGeolocation);
 
-        detailLayer.reset();
 
         Gdx.app.log("MAP", "Markers on map: " + markers.size);
-    }
-
-    private boolean trySelectMarker(float screenX, float screenY) {
-        Vector3 v = new Vector3(screenX, screenY, 0);
-        camera.unproject(v);
-
-        float hitRadius = 40f; // world pixels
-        for (Geolocation g : markers) {
-            Vector2 p = MapRasterTiles.getPixelPosition(g.lat, g.lng, tileMap.getBeginTile().x, tileMap.getBeginTile().y);
-            if (p.dst(v.x, v.y) <= hitRadius) {
-                selectedMarker = g;
-                detailPanel.request(selectedMarker);  // load zoom15 tiles
-                return true;
-            }
-        }
-        return false;
     }
 
     private void rebuildMarkersFromLocations() {
@@ -226,9 +196,8 @@ public class RasterMapScreen extends ScreenAdapter {
     }
 
     private void clampCameraToMap() {
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.5f, 2f);
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.3f, 2f);
 
-        // IMPORTANT: clamp against actual pixel map size (numTiles * tileSize)
         float mapPixelWidth = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
         float mapPixelHeight = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
 
@@ -248,21 +217,40 @@ public class RasterMapScreen extends ScreenAdapter {
         );
     }
 
-    private boolean isMarkerNearView(Geolocation g) {
-        // Convert geo to background pixel coords (same as you do for markers)
-        Vector2 p = MapRasterTiles.getPixelPosition(g.lat, g.lng, tileMap.getBeginTile().x, tileMap.getBeginTile().y);
+    @Override
+    public boolean tap(float x, float y, int count, int button) {
+        Vector3 world = new Vector3(x, y, 0);
+        camera.unproject(world);
 
-        float halfW = camera.viewportWidth * camera.zoom * 0.5f;
-        float halfH = camera.viewportHeight * camera.zoom * 0.5f;
+        float hitRadius = 40f;
 
-        // add margin so patches load slightly before marker enters view
-        float margin = 200f;
+        for (Geolocation g : markers) {
+            Vector2 p = MapRasterTiles.getPixelPosition(
+                g.lat, g.lng,
+                tileMap.getBeginTile().x,
+                tileMap.getBeginTile().y
+            );
 
-        return p.x >= camera.position.x - halfW - margin &&
-            p.x <= camera.position.x + halfW + margin &&
-            p.y >= camera.position.y - halfH - margin &&
-            p.y <= camera.position.y + halfH + margin;
+            if (p.dst(world.x, world.y) <= hitRadius) {
+                openHiveDetail(g);
+                return true;
+            }
+        }
+        return false;
     }
+
+    private void openHiveDetail(Geolocation hiveLocation) {
+        game.setScreen(new HiveDetailMapScreen(game, hiveLocation, markers));
+    }
+
+    @Override public boolean touchDown(float x, float y, int pointer, int button) { return false; }
+    @Override public boolean longPress(float x, float y) { return false; }
+    @Override public boolean fling(float velocityX, float velocityY, int button) { return false; }
+    @Override public boolean pan(float x, float y, float deltaX, float deltaY) { return false; }
+    @Override public boolean panStop(float x, float y, int pointer, int button) { return false; }
+    @Override public boolean zoom(float initialDistance, float distance) { return false; }
+    @Override public boolean pinch(Vector2 initialPointer1, Vector2 initialPointer2, Vector2 pointer1, Vector2 pointer2) { return false; }
+    @Override public void pinchStop() { }
 
     @Override
     public void hide() {
@@ -273,6 +261,5 @@ public class RasterMapScreen extends ScreenAdapter {
     public void dispose() {
         if (markerLayer != null) markerLayer.dispose();
         if (tileMap != null) tileMap.dispose();
-        if (detailLayer != null) detailLayer.dispose();
     }
 }
