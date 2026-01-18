@@ -1,4 +1,4 @@
-package si.um.feri.projketRRI.utils.api.model;
+package si.um.feri.projketRRI.api.calls.model;
 
 public class Notification {
     public int id;

@@ -1,4 +1,4 @@
-package si.um.feri.projketRRI.Models;
+package si.um.feri.projketRRI.api.calls.model;
 
 public class Hive {
 

@@ -1,4 +1,4 @@
-package si.um.feri.projketRRI.ApiCalls;
+package si.um.feri.projketRRI.api.calls;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Net;
@@ -8,7 +8,7 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
 
-import si.um.feri.projketRRI.Models.Hive;
+import si.um.feri.projketRRI.api.calls.model.Hive;
 
 public class HiveService {
 
