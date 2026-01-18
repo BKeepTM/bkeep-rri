@@ -22,7 +22,7 @@ import java.util.Map;
 
 public class LoginScreen extends ScreenAdapter {
 
-    private static final String API_URL = "http://localhost:3000";
+    private static final String API_URL = "https://pi.darkosever.si";
     private static final String TOKEN_PREFS = "auth";
     private static final String TOKEN_KEY = "token";
 
