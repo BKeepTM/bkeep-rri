@@ -5,14 +5,24 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.ScreenAdapter;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.input.GestureDetector;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Dialog;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
+import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
+import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 import java.util.List;
 
+import si.um.feri.projketRRI.api.calls.ApiClient; // Ensure ApiClient is imported
 import si.um.feri.projketRRI.api.calls.NotesService;
 import si.um.feri.projketRRI.api.calls.model.Hive;
 import si.um.feri.projketRRI.api.calls.model.Location;
@@ -52,6 +62,10 @@ public class HiveDetailMapScreen extends ScreenAdapter {
     private NotesUI notesUI;
     private boolean lastOnline = false;
 
+    // --- NEW UI FOR DELETE ---
+    private Stage uiStage;
+    private Skin skin;
+    // -------------------------
 
     public HiveDetailMapScreen(Projekt game, Hive hive, Location location, Array<Geolocation> markers, Array<HiveWeight> hiveWeights) {
         this.game = game;
@@ -84,13 +98,10 @@ public class HiveDetailMapScreen extends ScreenAdapter {
 
         cameraController = new CameraInputController(camera);
 
-
         String particlePath = null;
-
         if ("online".equalsIgnoreCase(hive.status)) {
             particlePath = "Particles/beeSmall.p";
         }
-
         lastOnline = "online".equalsIgnoreCase(hive.status);
 
         markerLayer = new MarkerLayer("Images/hive.png", particlePath);
@@ -98,44 +109,36 @@ public class HiveDetailMapScreen extends ScreenAdapter {
 
         markers.clear();
         markers.add(new Geolocation(location.latitude, location.longitude));
-
         markerLayer.syncParticlesToMarkers(markers.size);
 
+        // --- Info View ---
         hiveInfoView = new HiveInfoView();
         hiveInfoController = new HiveInfoController(hiveInfoView);
         hiveInfoController.setHive(hive);
 
+        // --- Weights Graph ---
         weightsGraphUI = new HiveWeightsGraphUI();
         weightsGraphUI.setTitle(hive.name + " weight");
         weightsGraphUI.setWeights(hiveWeights);
 
+        // --- Notes UI ---
         notesUI = new NotesUI(hive, new NotesUI.NotesActions() {
             @Override public void requestReloadNotes() {
-                notesUI.setLoading(true);
-                NotesService.loadNotesForHive(hive.id, new NotesService.NotesCallback() {
-                    @Override public void onSuccess(List<Notes> notes) {
-                        notesUI.setNotes(notes, hive.id);
-                    }
-                    @Override public void onError(String message) {
-                        notesUI.setError(message);
-                    }
-                });
+                loadNotes();
             }
             @Override public void showMessage(String msg) { System.out.println(msg); }
             @Override public void showError(String msg) { System.err.println(msg); }
         });
+        loadNotes();
 
-        notesUI.setLoading(true);
-        NotesService.loadNotesForHive(hive.id, new NotesService.NotesCallback() {
-            @Override public void onSuccess(List<Notes> notes) {
-                notesUI.setNotes(notes, hive.id);
-            }
-            @Override public void onError(String message) {
-                notesUI.setError(message);
-            }
-        });
+        // --- NEW: DELETE UI SETUP ---
+        setupDeleteUi();
+        // ----------------------------
 
         InputMultiplexer mux = new InputMultiplexer();
+
+        // Add the Delete UI stage to input
+        mux.addProcessor(uiStage);
 
         mux.addProcessor(notesUI.getStage());
         mux.addProcessor(weightsGraphUI.getStage());
@@ -165,6 +168,80 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         Gdx.input.setInputProcessor(mux);
     }
 
+    // --- Helper to setup Delete Button ---
+    private void setupDeleteUi() {
+        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        uiStage = new Stage(new ScreenViewport());
+
+        Table root = new Table();
+        root.setFillParent(true);
+        root.bottom().right().pad(10); // Position Top Right
+
+        TextButton deleteBtn = new TextButton("Remove Hive", skin);
+        deleteBtn.setColor(Color.RED); // Make it red for warning
+
+        deleteBtn.addListener(new ChangeListener() {
+            @Override
+            public void changed(ChangeEvent event, Actor actor) {
+                confirmDelete();
+            }
+        });
+
+        root.add(deleteBtn).width(120);
+        uiStage.addActor(root);
+    }
+
+    private void confirmDelete() {
+        Dialog dialog = new Dialog("Remove Hive?", skin) {
+            @Override
+            protected void result(Object object) {
+                if ((Boolean) object) {
+                    performDelete();
+                }
+            }
+        };
+        dialog.text("Are you sure you want to delete this hive?\nThis cannot be undone.");
+        dialog.button("Cancel", false);
+        dialog.button("Delete", true); // Returns true when clicked
+        dialog.show(uiStage);
+    }
+
+    private void performDelete() {
+        // Run network call on background thread
+        new Thread(() -> {
+            try {
+                boolean success = ApiClient.removeHive(hive.id);
+
+                Gdx.app.postRunnable(() -> {
+                    if (success) {
+                        Gdx.app.log("HIVE", "Hive removed successfully.");
+                        // Navigate back to the main map
+                        game.setScreen(new RasterMapScreen(game));
+                    } else {
+                        // Show error if needed
+                        Gdx.app.log("HIVE", "Failed to remove hive.");
+                    }
+                });
+            } catch (Exception e) {
+                Gdx.app.postRunnable(() -> {
+                    Gdx.app.log("HIVE", "Error removing hive: " + e.getMessage());
+                });
+            }
+        }).start();
+    }
+    // ------------------------------------
+
+    private void loadNotes() {
+        notesUI.setLoading(true);
+        NotesService.loadNotesForHive(hive.id, new NotesService.NotesCallback() {
+            @Override public void onSuccess(List<Notes> notes) {
+                notesUI.setNotes(notes, hive.id);
+            }
+            @Override public void onError(String message) {
+                notesUI.setError(message);
+            }
+        });
+    }
 
     private void clampCameraToMap() {
         camera.zoom = MathUtils.clamp(camera.zoom, 0.2f, 1.0f);
@@ -179,26 +256,6 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         camera.position.y = MathUtils.clamp(camera.position.y, vh/2f, mapH - vh/2f);
     }
 
-    private void refreshMarkerParticlesForStatus() {
-        boolean online = "online".equalsIgnoreCase(hive.status);
-
-        int count = markers.size;
-
-        if (markerLayer != null) {
-            markerLayer.dispose();
-        }
-
-        markerLayer = new MarkerLayer(
-            "Images/hive.png",
-            online ? "Particles/beeSmall.p" : null
-        );
-        markerLayer.setMapParams(ZOOM_DETAIL, NUM_TILES_DETAIL);
-        markerLayer.syncParticlesToMarkers(online ? count : 0);
-    }
-
-
-
-
     @Override
     public void render(float delta) {
         ScreenUtils.clear(0, 0, 0, 1);
@@ -209,10 +266,14 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         boolean online = "online".equalsIgnoreCase(hive.status);
 
         if (online != lastOnline) {
-            markerLayer.setParticlesEnabled(online);
+            if (markerLayer != null) markerLayer.dispose();
 
-            if (online) markerLayer.syncParticlesToMarkers(markers.size);
-            else markerLayer.syncParticlesToMarkers(0);
+            markerLayer = new MarkerLayer(
+                "Images/hive.png",
+                online ? "Particles/beeSmall.p" : null
+            );
+            markerLayer.setMapParams(ZOOM_DETAIL, NUM_TILES_DETAIL);
+            markerLayer.syncParticlesToMarkers(online ? markers.size : 0);
 
             lastOnline = online;
         }
@@ -221,6 +282,13 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         hiveInfoView.render();
         weightsGraphUI.render();
         notesUI.render();
+
+        // --- Render the Delete UI ---
+        if (uiStage != null) {
+            uiStage.act(delta);
+            uiStage.draw();
+        }
+        // ----------------------------
     }
 
     @Override
@@ -228,6 +296,7 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         if (hiveInfoView != null) hiveInfoView.resize(width, height);
         if (weightsGraphUI != null) weightsGraphUI.resize(width, height);
         if (notesUI != null) notesUI.resize(width, height);
+        if (uiStage != null) uiStage.getViewport().update(width, height, true);
     }
 
     @Override
@@ -237,7 +306,7 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         if (hiveInfoView != null) hiveInfoView.dispose();
         if (markerLayer != null) markerLayer.dispose();
         if (tileMap != null) tileMap.dispose();
+        if (uiStage != null) uiStage.dispose();
+        if (skin != null) skin.dispose();
     }
-
-
 }

@@ -14,11 +14,13 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 
 import si.um.feri.projketRRI.Projekt;
+import si.um.feri.projketRRI.api.calls.ApiClient;
 import si.um.feri.projketRRI.api.calls.HiveService;
 import si.um.feri.projketRRI.api.calls.HiveWeightService;
 import si.um.feri.projketRRI.api.calls.LocationService;
 import si.um.feri.projketRRI.api.calls.model.Hive;
 import si.um.feri.projketRRI.api.calls.model.Location;
+import si.um.feri.projketRRI.screens.mapUi.MapAddHiveUi;
 import si.um.feri.projketRRI.screens.mapUi.MapFilterUI;
 import si.um.feri.projketRRI.utils.CameraInputController;
 import si.um.feri.projketRRI.utils.Constants;
@@ -33,6 +35,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private final Projekt game;
 
     private OrthographicCamera camera;
+    private MapAddHiveUi addHiveUI;
 
     // center geolocation
     private Geolocation centerGeolocation = new Geolocation(46.4845641435028, 15.649055286737594);
@@ -71,6 +74,11 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private final Array<Geolocation> markersLR = new Array<>();
     private final Array<Geolocation> markersDB = new Array<>();
     private final Array<Geolocation> markersOnline = new Array<>();
+    //za dodajanje panjev...
+    private MapAddHiveUi addHiveUi;
+    private boolean isAddMode = false;
+    private Geolocation tempMarker = null; // To show where the user clicked
+    private MarkerLayer previewLayer; // Helper to draw the temp marker
 
     public RasterMapScreen(Projekt game) {
         this.game = game;
@@ -93,6 +101,9 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         layerLR = new MarkerLayer("Images/hive.png", null);
         layerDB = new MarkerLayer("Images/hive.png", null);
 
+        previewLayer = new MarkerLayer("Images/hive.png", null);
+        previewLayer.setMapParams(ZOOM_BG, Constants.NUM_TILES);
+
         layerAZ.setMapParams(ZOOM_BG, Constants.NUM_TILES);
         layerLR.setMapParams(ZOOM_BG, Constants.NUM_TILES);
         layerDB.setMapParams(ZOOM_BG, Constants.NUM_TILES);
@@ -105,7 +116,10 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         tileMap.rebuild(centerGeolocation);
 
         InputMultiplexer mux = new InputMultiplexer();
+
         filterUI = new MapFilterUI();
+        addHiveUI = new MapAddHiveUi();
+
         filterUI.setFilterListener((status, type) -> {
             statusFilter = status;
             typeFilter = type;
@@ -116,9 +130,45 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
                 particlesOnlineLayer.syncParticlesToMarkers(markersOnline.size);
             }
         });
+        addHiveUi = new MapAddHiveUi();
+        addHiveUi.setListener(new MapAddHiveUi.AddHiveListener() {
+            @Override
+            public void onModeChanged(boolean mode) {
+                isAddMode = mode;
+                if (!mode) {
+                    tempMarker = null; // Clear preview if canceled
+                }
+            }
 
+            @Override
+            public void onSave(String name, String type, String status, String locationDesc) {
+                if (tempMarker == null) return;
+
+                // Call API
+                Gdx.app.log("API", "Creating hive...");
+                ApiClient.createHive(name, type, status, locationDesc, tempMarker.lat, tempMarker.lng, new ApiClient.HiveCallback() {
+                    @Override
+                    public void onSuccess() {
+                        Gdx.app.postRunnable(() -> {
+                            Gdx.app.log("API", "Success!");
+                            addHiveUi.reset(); // Close form
+                            tempMarker = null; // Remove temp marker
+                            loadHivesAndLocations(); // Refresh map
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        Gdx.app.postRunnable(() -> {
+                            Gdx.app.log("API", "Error: " + message);
+                            // You could add a showError method to MapAddHiveUi to display this
+                        });
+                    }
+                });
+            }
+        });
         mux.addProcessor(filterUI.getStage());
-
+        mux.addProcessor(addHiveUi.getStage());
         mux.addProcessor(new GestureDetector(this));
 
         mux.addProcessor(new GestureDetector(cameraController));
@@ -147,10 +197,17 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         layerAZ.draw(camera, tileMap.getBeginTile(), markersAZ, delta);
         layerLR.draw(camera, tileMap.getBeginTile(), markersLR, delta);
         layerDB.draw(camera, tileMap.getBeginTile(), markersDB, delta);
-
         particlesOnlineLayer.draw(camera, tileMap.getBeginTile(), markersOnline, delta);
 
+
+        if (isAddMode && tempMarker != null) {
+            Array<Geolocation> tempArr = new Array<>();
+            tempArr.add(tempMarker);
+
+            previewLayer.draw(camera, tileMap.getBeginTile(), tempArr, delta);
+        }
         if (filterUI != null) filterUI.render();
+        if (addHiveUi != null) addHiveUi.render();
     }
 
     private void loadHivesAndLocations() {
@@ -331,7 +388,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     }
 
     private void clampCameraToMap() {
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.5f, 2f);
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.1f, 2f);
 
         float mapPixelWidth = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
         float mapPixelHeight = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
@@ -356,6 +413,21 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     public boolean tap(float x, float y, int count, int button) {
         Vector3 world = new Vector3(x, y, 0);
         camera.unproject(world);
+
+        if (isAddMode) {
+            // Calculate Lat/Lon from screen click
+            Geolocation g = getGeolocationFromPixel(
+                world.x, world.y
+            );
+
+            // 1. Update the UI
+            addHiveUi.updateCoordinates(g.lat, g.lng);
+
+            // 2. Set the visual marker
+            tempMarker = g;
+
+            return true; // Consume the tap so we don't open other hives
+        }
 
         float hitRadius = 40f;
 
@@ -393,7 +465,9 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
     @Override
     public void resize(int width, int height) {
+        camera.update();
         if (filterUI != null) filterUI.resize(width, height);
+        if (addHiveUI != null) addHiveUI.resize(width, height);
     }
 
 
@@ -415,6 +489,37 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     public void dispose() {
         if (filterUI != null) filterUI.dispose();
         if (markerLayer != null) markerLayer.dispose();
+        if (addHiveUi != null) addHiveUi.dispose();
         if (tileMap != null) tileMap.dispose();
+    }
+    //helper za shit
+    private Geolocation getGeolocationFromPixel(float worldX, float worldY) {
+        // 1. Setup constants strictly from MapRasterTiles
+        // Ensure these match your MapRasterTiles class (usually 512)
+        double tileSize = si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
+        double zoomFactor = Math.pow(2, Constants.ZOOM); // Use the current map zoom level
+
+        // 2. Calculate Global Pixel X (Standard)
+        // Global X = (Start Tile X * Size) + Click Offset X
+        double globalPixelX = (tileMap.getBeginTile().x * tileSize) + worldX;
+
+        // 3. Calculate Global Pixel Y (Inverted)
+        // LibGDX World Y is 0 at Bottom. OSM Global Pixel Y is 0 at Top.
+        // We must subtract the World Y from the "Bottom" of the rendered grid to get the offset from the Top.
+        // The bottom of the grid in Global Pixels is: (Start Tile Y + Num Tiles) * Size
+        double mapHeightTiles = Constants.NUM_TILES;
+        double globalPixelY = ((tileMap.getBeginTile().y + mapHeightTiles) * tileSize) - worldY;
+
+        // 4. Normalize (0.0 to 1.0)
+        double mapSize = tileSize * zoomFactor;
+        double normalizedX = globalPixelX / mapSize;
+        double normalizedY = globalPixelY / mapSize;
+
+        // 5. Mercator Reverse Projection
+        double lon = normalizedX * 360.0 - 180.0;
+        double n = Math.PI - 2.0 * Math.PI * normalizedY;
+        double lat = Math.toDegrees(Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))));
+
+        return new Geolocation(lat, lon);
     }
 }

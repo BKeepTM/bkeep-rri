@@ -128,6 +128,61 @@ public class ApiClient {
             return gson.fromJson(responseBody, listType);
         }
     }
+    public static void createHive(String name, String type, String status, String locationDesc, double lat, double lng, final HiveCallback callback) {
+        CreateRequest payload = new CreateRequest(name, type, status, locationDesc, lat, lng);
+        String jsonBody = gson.toJson(payload);
+
+        RequestBody body = RequestBody.create(jsonBody, JSON_MEDIA_TYPE);
+
+        Request request = new Request.Builder()
+            .url(API_URL + "/hive") // Matches your HiveController.create
+            .header("Authorization", "Bearer " + token)
+            .post(body)
+            .build();
+
+        client.newCall(request).enqueue(new okhttp3.Callback() {
+            @Override
+            public void onFailure(okhttp3.Call call, IOException e) {
+                callback.onError(e.getMessage());
+            }
+
+            @Override
+            public void onResponse(okhttp3.Call call, Response response) throws IOException {
+                if (!response.isSuccessful()) {
+                    callback.onError("Server Error: " + response.code());
+                    return;
+                }
+                String responseBody = response.body().string();
+                // Depending on if your backend returns the single Hive object or just ID
+                callback.onSuccess();
+            }
+        });
+    }
+
+    // Callback interface (if you don't have a generic one already)
+    public interface HiveCallback {
+        void onSuccess();
+        void onError(String message);
+    }
+
+    // The Payload class matching your Node.js req.body
+    private static class CreateRequest {
+        String name;
+        String type;
+        String status;
+        String location; // This corresponds to 'location description' in your backend
+        double latitude;
+        double longitude;
+
+        public CreateRequest(String name, String type, String status, String location, double latitude, double longitude) {
+            this.name = name;
+            this.type = type;
+            this.status = status;
+            this.location = location;
+            this.latitude = latitude;
+            this.longitude = longitude;
+        }
+    }
     private static class SearchRequest {
         String name;
         SearchRequest(String name) { this.name = name; }
