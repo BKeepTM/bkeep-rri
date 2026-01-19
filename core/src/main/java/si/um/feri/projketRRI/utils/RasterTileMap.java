@@ -66,6 +66,9 @@ public class RasterTileMap implements Disposable {
             }
         }
 
+        Gdx.app.log("CACHE", "Path: " + Gdx.files.local("tilecache").file().getAbsolutePath());
+
+
         layers.add(layer);
         tiledMapRenderer = new OrthogonalTiledMapRenderer(tiledMap);
     }
