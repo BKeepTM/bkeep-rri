@@ -32,7 +32,7 @@ import si.um.feri.projketRRI.utils.RasterTileMap;
 public class HiveDetailMapScreen extends ScreenAdapter {
 
     private final Projekt game;
-    private final Array<Geolocation> markers;
+    private final Array<Geolocation> markers = new Array<>();
 
     private final Array<HiveWeight> hiveWeights;
     private final Hive hive;
@@ -50,13 +50,13 @@ public class HiveDetailMapScreen extends ScreenAdapter {
     private HiveWeightsGraphUI weightsGraphUI;
 
     private NotesUI notesUI;
+    private boolean lastOnline = false;
 
 
     public HiveDetailMapScreen(Projekt game, Hive hive, Location location, Array<Geolocation> markers, Array<HiveWeight> hiveWeights) {
         this.game = game;
         this.hive = hive;
         this.location = location;
-        this.markers = markers;
         this.hiveWeights = hiveWeights;
     }
 
@@ -84,8 +84,21 @@ public class HiveDetailMapScreen extends ScreenAdapter {
 
         cameraController = new CameraInputController(camera);
 
-        markerLayer = new MarkerLayer("Images/hive.png", "Particles/beeSmall.p");
+
+        String particlePath = null;
+
+        if ("online".equalsIgnoreCase(hive.status)) {
+            particlePath = "Particles/beeSmall.p";
+        }
+
+        lastOnline = "online".equalsIgnoreCase(hive.status);
+
+        markerLayer = new MarkerLayer("Images/hive.png", particlePath);
         markerLayer.setMapParams(ZOOM_DETAIL, NUM_TILES_DETAIL);
+
+        markers.clear();
+        markers.add(new Geolocation(location.latitude, location.longitude));
+
         markerLayer.syncParticlesToMarkers(markers.size);
 
         hiveInfoView = new HiveInfoView();
@@ -166,6 +179,24 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         camera.position.y = MathUtils.clamp(camera.position.y, vh/2f, mapH - vh/2f);
     }
 
+    private void refreshMarkerParticlesForStatus() {
+        boolean online = "online".equalsIgnoreCase(hive.status);
+
+        int count = markers.size;
+
+        if (markerLayer != null) {
+            markerLayer.dispose();
+        }
+
+        markerLayer = new MarkerLayer(
+            "Images/hive.png",
+            online ? "Particles/beeSmall.p" : null
+        );
+        markerLayer.setMapParams(ZOOM_DETAIL, NUM_TILES_DETAIL);
+        markerLayer.syncParticlesToMarkers(online ? count : 0);
+    }
+
+
 
 
     @Override
@@ -174,6 +205,18 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         clampCameraToMap();
         camera.update();
         tileMap.render(camera);
+
+        boolean online = "online".equalsIgnoreCase(hive.status);
+
+        if (online != lastOnline) {
+            markerLayer.setParticlesEnabled(online);
+
+            if (online) markerLayer.syncParticlesToMarkers(markers.size);
+            else markerLayer.syncParticlesToMarkers(0);
+
+            lastOnline = online;
+        }
+
         markerLayer.draw(camera, tileMap.getBeginTile(), markers, delta);
         hiveInfoView.render();
         weightsGraphUI.render();

@@ -19,6 +19,7 @@ import si.um.feri.projketRRI.api.calls.HiveWeightService;
 import si.um.feri.projketRRI.api.calls.LocationService;
 import si.um.feri.projketRRI.api.calls.model.Hive;
 import si.um.feri.projketRRI.api.calls.model.Location;
+import si.um.feri.projketRRI.screens.mapUi.MapFilterUI;
 import si.um.feri.projketRRI.utils.CameraInputController;
 import si.um.feri.projketRRI.utils.Constants;
 import si.um.feri.projketRRI.utils.Geolocation;
@@ -55,6 +56,22 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private IntMap<Array<HiveWeight>> weightsByHiveId = new IntMap<>();
     private boolean weightsLoading = false;
 
+    private MapFilterUI filterUI;
+
+    private MapFilterUI.StatusFilter statusFilter = MapFilterUI.StatusFilter.ALL;
+    private MapFilterUI.TypeFilter typeFilter = MapFilterUI.TypeFilter.ALL;
+
+    private MarkerLayer layerAZ;
+    private MarkerLayer layerLR;
+    private MarkerLayer layerDB;
+
+    private MarkerLayer particlesOnlineLayer;
+
+    private final Array<Geolocation> markersAZ = new Array<>();
+    private final Array<Geolocation> markersLR = new Array<>();
+    private final Array<Geolocation> markersDB = new Array<>();
+    private final Array<Geolocation> markersOnline = new Array<>();
+
     public RasterMapScreen(Projekt game) {
         this.game = game;
     }
@@ -72,13 +89,35 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         tileMap = new RasterTileMap();
         tileMap.setTileZoom(ZOOM_BG);
 
-        markerLayer = new MarkerLayer("Images/hive.png", "Particles/beeSmall.p");
-        markerLayer.setMapParams(ZOOM_BG, Constants.NUM_TILES);
+        layerAZ = new MarkerLayer("Images/hive.png", null);
+        layerLR = new MarkerLayer("Images/hive.png", null);
+        layerDB = new MarkerLayer("Images/hive.png", null);
+
+        layerAZ.setMapParams(ZOOM_BG, Constants.NUM_TILES);
+        layerLR.setMapParams(ZOOM_BG, Constants.NUM_TILES);
+        layerDB.setMapParams(ZOOM_BG, Constants.NUM_TILES);
+
+        particlesOnlineLayer = new MarkerLayer("Images/hive.png", "Particles/beeSmall.p");
+        particlesOnlineLayer.setMapParams(ZOOM_BG, Constants.NUM_TILES);
+
         cameraController = new CameraInputController(camera);
 
         tileMap.rebuild(centerGeolocation);
 
         InputMultiplexer mux = new InputMultiplexer();
+        filterUI = new MapFilterUI();
+        filterUI.setFilterListener((status, type) -> {
+            statusFilter = status;
+            typeFilter = type;
+
+            rebuildMarkersByTypeAndOnline();
+
+            if (particlesOnlineLayer != null) {
+                particlesOnlineLayer.syncParticlesToMarkers(markersOnline.size);
+            }
+        });
+
+        mux.addProcessor(filterUI.getStage());
 
         mux.addProcessor(new GestureDetector(this));
 
@@ -105,7 +144,13 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         camera.update();
 
         tileMap.render(camera);
-        markerLayer.draw(camera, tileMap.getBeginTile(), markers, delta);
+        layerAZ.draw(camera, tileMap.getBeginTile(), markersAZ, delta);
+        layerLR.draw(camera, tileMap.getBeginTile(), markersLR, delta);
+        layerDB.draw(camera, tileMap.getBeginTile(), markersDB, delta);
+
+        particlesOnlineLayer.draw(camera, tileMap.getBeginTile(), markersOnline, delta);
+
+        if (filterUI != null) filterUI.render();
     }
 
     private void loadHivesAndLocations() {
@@ -191,15 +236,15 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
     private void onAllLocationsLoaded() {
         loading = false;
-        rebuildMarkersFromLocations();
+        rebuildMarkersByTypeAndOnline();
 
-        if (markers.size > 0) {
-            centerOnMarkersAverage();
+        if (markersAZ.size + markersLR.size + markersDB.size > 0) {
+            centerOnVisibleMarkersAverage();
             tileMap.setTileZoom(ZOOM_BG);
             tileMap.rebuild(centerGeolocation);
         }
 
-        markerLayer.syncParticlesToMarkers(markers.size);
+        particlesOnlineLayer.syncParticlesToMarkers(markersOnline.size);
 
         loadHiveWeightsAsync();
 
@@ -207,20 +252,82 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     }
 
 
-    private void rebuildMarkersFromLocations() {
-        markers.clear();
+    private void rebuildMarkersByTypeAndOnline() {
+        markersAZ.clear();
+        markersLR.clear();
+        markersDB.clear();
+        markersOnline.clear();
 
         for (Hive hive : hives) {
+            if (!matchesStatus(hive, statusFilter)) continue;
+            if (!matchesType(hive, typeFilter)) continue;
+
             Location loc = locationsById.get(hive.id_location);
             if (loc == null) continue;
-            markers.add(new Geolocation(loc.latitude, loc.longitude));
+
+            Geolocation g = new Geolocation(loc.latitude, loc.longitude);
+
+            String type = hive.type != null ? hive.type.trim().toLowerCase() : "";
+            if (type.equals("az")) markersAZ.add(g);
+            else if (type.equals("lr")) markersLR.add(g);
+            else if (type.equals("db")) markersDB.add(g);
+
+            if (isOnline(hive.status)) markersOnline.add(g);
         }
+
+        // particles only for online
+        particlesOnlineLayer.syncParticlesToMarkers(markersOnline.size);
     }
 
-    private void centerOnMarkersAverage() {
-        double sumLat = 0, sumLng = 0;
-        for (Geolocation m : markers) { sumLat += m.lat; sumLng += m.lng; }
-        centerGeolocation = new Geolocation(sumLat / markers.size, sumLng / markers.size);
+    private boolean isOnline(String status) {
+        if (status == null) return false;
+        String s = status.trim().toLowerCase();
+        return s.equals("online") || s.equals("true") || s.equals("1") || s.equals("on");
+    }
+
+    private boolean matchesType(Hive hive, MapFilterUI.TypeFilter filter) {
+        if (filter == MapFilterUI.TypeFilter.ALL) return true;
+
+        String t = hive.type != null ? hive.type.trim().toLowerCase() : "";
+        if (filter == MapFilterUI.TypeFilter.AZ) return t.equals("az");
+        if (filter == MapFilterUI.TypeFilter.LR) return t.equals("lr");
+        if (filter == MapFilterUI.TypeFilter.DB) return t.equals("db");
+        return true;
+    }
+
+    private boolean matchesStatus(Hive hive, MapFilterUI.StatusFilter filter) {
+        if (filter == MapFilterUI.StatusFilter.ALL) return true;
+
+        if (hive == null || hive.status == null) return false;
+
+        String s = hive.status.trim().toLowerCase();
+
+        boolean online =
+            s.equals("online") ||
+                s.equals("on") ||
+                s.equals("1") ||
+                s.equals("true");
+
+        if (filter == MapFilterUI.StatusFilter.ONLINE) {
+            return online;
+        }
+        return !online;
+    }
+
+
+
+    private void centerOnVisibleMarkersAverage() {
+        int count = markersAZ.size + markersLR.size + markersDB.size;
+        if (count == 0) return;
+
+        double sumLat = 0;
+        double sumLng = 0;
+
+        for (Geolocation m : markersAZ) { sumLat += m.lat; sumLng += m.lng; }
+        for (Geolocation m : markersLR) { sumLat += m.lat; sumLng += m.lng; }
+        for (Geolocation m : markersDB) { sumLat += m.lat; sumLng += m.lng; }
+
+        centerGeolocation = new Geolocation(sumLat / count, sumLng / count);
     }
 
     private void clampCameraToMap() {
@@ -284,6 +391,12 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         );
     }
 
+    @Override
+    public void resize(int width, int height) {
+        if (filterUI != null) filterUI.resize(width, height);
+    }
+
+
     @Override public boolean touchDown(float x, float y, int pointer, int button) { return false; }
     @Override public boolean longPress(float x, float y) { return false; }
     @Override public boolean fling(float velocityX, float velocityY, int button) { return false; }
@@ -300,6 +413,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
     @Override
     public void dispose() {
+        if (filterUI != null) filterUI.dispose();
         if (markerLayer != null) markerLayer.dispose();
         if (tileMap != null) tileMap.dispose();
     }
