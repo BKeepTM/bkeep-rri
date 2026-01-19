@@ -1,4 +1,4 @@
-package si.um.feri.projketRRI.screens.detailScreenUi;
+package si.um.feri.projketRRI.screens.detailScreenUi.hiveWeight;
 
 import com.badlogic.gdx.graphics.g2d.Batch;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
@@ -9,7 +9,6 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.scenes.scene2d.InputEvent;
 import com.badlogic.gdx.scenes.scene2d.InputListener;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
-import com.badlogic.gdx.math.Vector2;
 
 import java.time.Instant;
 import java.time.ZoneId;

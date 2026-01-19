@@ -19,11 +19,12 @@ import si.um.feri.projketRRI.api.calls.model.Location;
 import si.um.feri.projketRRI.Projekt;
 import si.um.feri.projketRRI.api.calls.model.HiveWeight;
 import si.um.feri.projketRRI.api.calls.model.Notes;
-import si.um.feri.projketRRI.screens.detailScreenUi.NotesUI;
+import si.um.feri.projketRRI.screens.detailScreenUi.hiveNotes.NotesUI;
+import si.um.feri.projketRRI.screens.detailScreenUi.hiveInfo.HiveInfoController;
+import si.um.feri.projketRRI.screens.detailScreenUi.hiveInfo.HiveInfoView;
 import si.um.feri.projketRRI.utils.CameraInputController;
 import si.um.feri.projketRRI.utils.Geolocation;
-import si.um.feri.projketRRI.screens.detailScreenUi.HiveInfoUI;
-import si.um.feri.projketRRI.screens.detailScreenUi.HiveWeightsGraphUI;
+import si.um.feri.projketRRI.screens.detailScreenUi.hiveWeight.HiveWeightsGraphUI;
 import si.um.feri.projketRRI.utils.MapRasterTiles;
 import si.um.feri.projketRRI.utils.MarkerLayer;
 import si.um.feri.projketRRI.utils.RasterTileMap;
@@ -44,7 +45,8 @@ public class HiveDetailMapScreen extends ScreenAdapter {
     private static final int ZOOM_DETAIL = 17;
     private static final int NUM_TILES_DETAIL = 7;
 
-    private HiveInfoUI hiveInfoUI;
+    private HiveInfoView hiveInfoView;
+    private HiveInfoController hiveInfoController;
     private HiveWeightsGraphUI weightsGraphUI;
 
     private NotesUI notesUI;
@@ -86,37 +88,45 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         markerLayer.setMapParams(ZOOM_DETAIL, NUM_TILES_DETAIL);
         markerLayer.syncParticlesToMarkers(markers.size);
 
-        hiveInfoUI = new HiveInfoUI();
-        hiveInfoUI.setHiveData(
-            hive.name,
-            hive.location,
-            hive.type,
-            hive.status
-        );
+        hiveInfoView = new HiveInfoView();
+        hiveInfoController = new HiveInfoController(hiveInfoView);
+        hiveInfoController.setHive(hive);
 
         weightsGraphUI = new HiveWeightsGraphUI();
-        weightsGraphUI.setTitle(hive.name + " weight"); // if you pass Hive
+        weightsGraphUI.setTitle(hive.name + " weight");
         weightsGraphUI.setWeights(hiveWeights);
 
-        notesUI = new NotesUI();
-        notesUI.setLoading(true);
-
-        NotesService.loadNotesForHive(hive.id, new NotesService.NotesCallback() {
-            @Override
-            public void onSuccess(List<Notes> notes) {
-                notesUI.setLoading(false);
-                notesUI.setNotes(notes);
+        notesUI = new NotesUI(hive, new NotesUI.NotesActions() {
+            @Override public void requestReloadNotes() {
+                notesUI.setLoading(true);
+                NotesService.loadNotesForHive(hive.id, new NotesService.NotesCallback() {
+                    @Override public void onSuccess(List<Notes> notes) {
+                        notesUI.setNotes(notes, hive.id);
+                    }
+                    @Override public void onError(String message) {
+                        notesUI.setError(message);
+                    }
+                });
             }
+            @Override public void showMessage(String msg) { System.out.println(msg); }
+            @Override public void showError(String msg) { System.err.println(msg); }
+        });
 
-            @Override
-            public void onError(String message) {
-                notesUI.setLoading(false);
-                notesUI.setError("Failed to load notes");
-                Gdx.app.log("NOTES", "Failed: " + message);
+        notesUI.setLoading(true);
+        NotesService.loadNotesForHive(hive.id, new NotesService.NotesCallback() {
+            @Override public void onSuccess(List<Notes> notes) {
+                notesUI.setNotes(notes, hive.id);
+            }
+            @Override public void onError(String message) {
+                notesUI.setError(message);
             }
         });
 
         InputMultiplexer mux = new InputMultiplexer();
+
+        mux.addProcessor(notesUI.getStage());
+        mux.addProcessor(weightsGraphUI.getStage());
+        mux.addProcessor(hiveInfoView.getStage());
 
         mux.addProcessor(new InputAdapter() {
             @Override
@@ -126,11 +136,8 @@ public class HiveDetailMapScreen extends ScreenAdapter {
             }
         });
 
-        mux.addProcessor(hiveInfoUI.getStage());
-        mux.addProcessor(weightsGraphUI.getStage());
-        mux.addProcessor(notesUI.getStage());
-
         mux.addProcessor(new GestureDetector(cameraController));
+
         mux.addProcessor(new InputAdapter() {
             @Override
             public boolean keyDown(int keycode) {
@@ -143,7 +150,6 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         });
 
         Gdx.input.setInputProcessor(mux);
-
     }
 
 
@@ -169,14 +175,14 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         camera.update();
         tileMap.render(camera);
         markerLayer.draw(camera, tileMap.getBeginTile(), markers, delta);
-        hiveInfoUI.render();
+        hiveInfoView.render();
         weightsGraphUI.render();
         notesUI.render();
     }
 
     @Override
     public void resize(int width, int height) {
-        if (hiveInfoUI != null) hiveInfoUI.resize(width, height);
+        if (hiveInfoView != null) hiveInfoView.resize(width, height);
         if (weightsGraphUI != null) weightsGraphUI.resize(width, height);
         if (notesUI != null) notesUI.resize(width, height);
     }
@@ -185,7 +191,7 @@ public class HiveDetailMapScreen extends ScreenAdapter {
     public void dispose() {
         if (notesUI != null) notesUI.dispose();
         if (weightsGraphUI != null) weightsGraphUI.dispose();
-        if (hiveInfoUI != null) hiveInfoUI.dispose();
+        if (hiveInfoView != null) hiveInfoView.dispose();
         if (markerLayer != null) markerLayer.dispose();
         if (tileMap != null) tileMap.dispose();
     }

@@ -16,10 +16,11 @@ import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
 
 import si.um.feri.projketRRI.Projekt;
+import si.um.feri.projketRRI.utils.Constants;
 
 public class LoginScreen extends ScreenAdapter {
 
-    private static final String API_URL = "http://localhost:3000"; //"https://pi.darkosever.si";
+    private static final String API_URL = Constants.API_URL;
     private static final String TOKEN_PREFS = "auth";
     private static final String TOKEN_KEY = "token";
 

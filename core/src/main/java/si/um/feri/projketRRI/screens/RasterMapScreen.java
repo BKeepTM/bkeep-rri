@@ -48,7 +48,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private MarkerLayer markerLayer;
     private CameraInputController cameraController;
 
-    private final int ZOOM_BG = 9;
+    private final int ZOOM_BG = Constants.ZOOM;
 
     private Geolocation selectedMarker = null;
 

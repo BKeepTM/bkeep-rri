@@ -233,7 +233,6 @@ public class MapRasterTiles {
     }
 
     public static Geolocation[][] fetchPath(Geolocation[] geolocations){
-        // Example coordinates (longitude, latitude)
         double[][] coordinatesArray = {
                 {-122.42, 37.78}, // San Francisco
                 {-121.89, 37.33}, // San Jose
