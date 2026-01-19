@@ -20,13 +20,13 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 import si.um.feri.projketRRI.api.calls.model.HiveWeight;
+import si.um.feri.projketRRI.utils.Constants;
 
 public class HiveWeightService {
 
-    // Reuse ApiClient if you want; keeping local here is fine too.
-    //private static final String API_URL = "https://pi.darkosever.si";
+    private static final String API_URL = Constants.API_URL;
 
-    private static final String API_URL = "http://localhost:3000";
+    //private static final String API_URL = "http://localhost:3000";
 
     private static final String PREFS = "auth";
 

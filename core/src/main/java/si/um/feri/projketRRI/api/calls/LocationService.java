@@ -8,10 +8,11 @@ import com.badlogic.gdx.utils.JsonReader;
 import com.badlogic.gdx.utils.JsonValue;
 
 import si.um.feri.projketRRI.api.calls.model.Location;
+import si.um.feri.projketRRI.utils.Constants;
 
 public class LocationService {
 
-    private static final String API_URL = "http://localhost:3000";
+    private static final String API_URL = Constants.API_URL;
     private static final String PREFS = "auth";
 
     /**
