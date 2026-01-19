@@ -17,6 +17,7 @@ import com.badlogic.gdx.utils.JsonValue;
 
 import si.um.feri.projketRRI.Projekt;
 import si.um.feri.projketRRI.utils.Constants;
+import si.um.feri.projketRRI.utils.Geolocation;
 
 public class LoginScreen extends ScreenAdapter {
 
@@ -60,7 +61,14 @@ public class LoginScreen extends ScreenAdapter {
 
         String token = Gdx.app.getPreferences("auth").getString("token", "");
         if (!token.isEmpty()) {
-            projekt.setScreen(new RasterMapScreen(projekt));
+            Geolocation center = new Geolocation(46.48, 15.64);
+            projekt.setScreen(new GameLoadingScreen(
+                projekt,
+                center,
+                Constants.ZOOM,
+                Constants.NUM_TILES,
+                () -> projekt.setScreen(new RasterMapScreen(projekt))
+            ));
             dispose();
         }
 
@@ -173,7 +181,15 @@ public class LoginScreen extends ScreenAdapter {
                             saveToken(token);
                             statusLabel.setText("Login uspešen! Token shranjen.");
 
-                            projekt.setScreen(new RasterMapScreen(projekt));
+                            Geolocation center = new Geolocation(46.48, 15.64);
+
+                            projekt.setScreen(new GameLoadingScreen(
+                                projekt,
+                                center,
+                                Constants.ZOOM,
+                                Constants.NUM_TILES,
+                                () -> projekt.setScreen(new RasterMapScreen(projekt))
+                            ));
                             dispose();
 
                         } catch (Exception e) {

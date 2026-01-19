@@ -375,6 +375,16 @@ public class MapRasterTiles {
         return null;
     }
 
+    public static void prefetchRasterTileZone(ZoomXY center, int numTiles) throws IOException {
+        int half = (numTiles - 1) / 2;
+        for (int dy = -half; dy <= half; dy++) {
+            for (int dx = -half; dx <= half; dx++) {
+                prefetchRasterTile(center.zoom, center.x + dx, center.y + dy);
+            }
+        }
+    }
+
+
 
 
 }
