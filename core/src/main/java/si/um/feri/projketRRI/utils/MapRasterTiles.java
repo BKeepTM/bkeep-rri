@@ -17,6 +17,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
 
@@ -38,6 +41,8 @@ public class MapRasterTiles {
     //@2x in format means it returns higher DPI version of the image and the image size is 512px (otherwise it is 256px)
     final static public int TILE_SIZE = 512;
 
+    private static final String CACHE_DIR = "tilecache/geoapify/" + tilesetId + "/";
+
     /**
      * Get raster tile based on zoom and tile number.
      *
@@ -48,9 +53,18 @@ public class MapRasterTiles {
      * @throws IOException
      */
     public static Texture getRasterTile(int zoom, int x, int y) throws IOException {
+        FileHandle cache = tileFile(zoom, x, y);
+
+        if (cache.exists() && cache.length() > 0) {
+            return getTexture(cache.readBytes());
+        }
+
         URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
         ByteArrayOutputStream bis = fetchTile(url);
-        return getTexture(bis.toByteArray());
+        byte[] bytes = bis.toByteArray();
+
+        writeBytes(cache, bytes);
+        return getTexture(bytes);
     }
 
     /**
@@ -59,12 +73,12 @@ public class MapRasterTiles {
      * @param zoomXY string should be in format zoom/x/y
      * @return
      * @throws IOException
+     *
+     * public static Texture getRasterTile(String zoomXY) throws IOException {
+     *         ZoomXY z = ZoomXY.parse(zoomXY); // if you don’t have parse, skip this overload caching
+     *         return getRasterTile(z.zoom, z.x, z.y);
+     *     }
      */
-    public static Texture getRasterTile(String zoomXY) throws IOException {
-        URL url = new URL(mapServiceUrl + tilesetId + "/" + zoomXY + format + token);
-        ByteArrayOutputStream bis = fetchTile(url);
-        return getTexture(bis.toByteArray());
-    }
 
     /**
      * Get raster tile based on zoom and tile number.
@@ -74,9 +88,7 @@ public class MapRasterTiles {
      * @throws IOException
      */
     public static Texture getRasterTile(ZoomXY zoomXY) throws IOException {
-        URL url = new URL(mapServiceUrl + tilesetId + "/" + zoomXY.toString() + format + token);
-        ByteArrayOutputStream bis = fetchTile(url);
-        return getTexture(bis.toByteArray());
+        return getRasterTile(zoomXY.zoom, zoomXY.x, zoomXY.y);
     }
 
     /**
@@ -97,8 +109,13 @@ public class MapRasterTiles {
                 int tx = center.x + col;
                 int ty = center.y + row;
 
-                array[index++] = getRasterTile(center.zoom, tx, ty);
-                System.out.println(center.zoom + "/" + tx + "/" + ty);
+                Texture cached = tryGetRasterTileFromCache(center.zoom, tx, ty);
+                if (cached != null) {
+                    array[index++] = cached;
+                } else {
+                    // fall back to download+cache
+                    array[index++] = getRasterTile(center.zoom, tx, ty);
+                }
             }
         }
         return array;
@@ -114,15 +131,14 @@ public class MapRasterTiles {
      */
     public static ByteArrayOutputStream fetchTile(URL url) throws IOException {
         ByteArrayOutputStream bis = new ByteArrayOutputStream();
-        InputStream is = url.openStream();
-        byte[] bytebuff = new byte[4096];
-        int n;
-
-        while ((n = is.read(bytebuff)) > 0) {
-            bis.write(bytebuff, 0, n);
+        try (InputStream is = url.openStream()) {
+            byte[] bytebuff = new byte[4096];
+            int n;
+            while ((n = is.read(bytebuff)) > 0) bis.write(bytebuff, 0, n);
         }
         return bis;
     }
+
 
     /**
      * Converts byte[] to Texture.
@@ -316,22 +332,49 @@ public class MapRasterTiles {
         }
     }
 
-    public static void prefetchRasterTile(int zoom, int x, int y) throws IOException {
-        // This should download/save the tile image to your cache location,
-        // but must NOT call new Texture() or any GL code.
-        // If your getRasterTile(...) already downloads to disk, split it:
-        // - downloadToCache(...)
-        // - loadTextureFromCache(...) (GL thread only)
+    private static FileHandle tileFile(int zoom, int x, int y) {
+        return Gdx.files.local(CACHE_DIR + tileFilename(zoom, x, y));
     }
 
+    private static void ensureDir(FileHandle fh) {
+        FileHandle parent = fh.parent();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+    }
 
-    public static void prefetchRasterTileZone(ZoomXY center, int numTiles) throws IOException {
-        int half = (numTiles - 1) / 2;
-        for (int dy = -half; dy <= half; dy++) {
-            for (int dx = -half; dx <= half; dx++) {
-                prefetchRasterTile(center.zoom, center.x + dx, center.y + dy);
-            }
+    private static void ensureParentExists(FileHandle fh) {
+        FileHandle parent = fh.parent();
+        if (parent != null && !parent.exists()) parent.mkdirs();
+    }
+
+    private static void writeBytes(FileHandle fh, byte[] data) throws IOException {
+        ensureDir(fh);
+        try (OutputStream os = fh.write(false)) { // libGDX stream
+            os.write(data);
         }
     }
+
+    public static void prefetchRasterTile(int zoom, int x, int y) throws IOException {
+        FileHandle cache = tileFile(zoom, x, y);
+        if (cache.exists() && cache.length() > 0) return; // already cached
+
+        URL url = new URL(mapServiceUrl + tilesetId + "/" + zoom + "/" + x + "/" + y + format + token);
+        ByteArrayOutputStream bis = fetchTile(url);
+        writeBytes(cache, bis.toByteArray());
+    }
+
+    private static String tileFilename(int zoom, int x, int y) {
+        // e.g. 17_69432_44622@2x.png
+        return zoom + "_" + x + "_" + y + format;
+    }
+
+    public static Texture tryGetRasterTileFromCache(int zoom, int x, int y) {
+        FileHandle cache = tileFile(zoom, x, y);
+        if (cache.exists() && cache.length() > 0) {
+            return getTexture(cache.readBytes());
+        }
+        return null;
+    }
+
+
 
 }

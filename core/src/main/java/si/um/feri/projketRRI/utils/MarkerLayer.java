@@ -87,6 +87,11 @@ public class MarkerLayer implements Disposable {
     }
 
     public void setParticlesEnabled(boolean enabled) {
+        if (template == null) {
+            template = new ParticleEffect();
+            template.load(Gdx.files.internal("Particles/beeSmall.p"), Gdx.files.internal(""));
+        }
+
         this.particlesEnabled = enabled;
 
         if (!enabled) {
