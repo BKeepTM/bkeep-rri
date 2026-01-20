@@ -28,14 +28,13 @@ public class HiveWeightsGraphUI implements Disposable {
         root.bottom().left().pad(12);
 
         Table panel = new Table(skin);
-        // If your skin doesn't have this drawable, remove the next line
         panel.background("default-round");
         panel.pad(12);
 
         title = new Label("Hive weight", skin);
 
         graphActor = new HiveWeightsGraphActor();
-        graphActor.setSize(420, 180); // graph size inside panel
+        graphActor.setSize(420, 180);
 
         panel.add(title).left().row();
         panel.add(graphActor).width(420).height(180).left().padTop(8);

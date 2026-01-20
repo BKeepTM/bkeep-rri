@@ -1,4 +1,4 @@
-package si.um.feri.projketRRI.screens.detailScreenUi;
+package si.um.feri.projketRRI.screens.detailScreenUi.simulation;
 
 public class SimulationParams {
     public int days;

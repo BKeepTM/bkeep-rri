@@ -47,7 +47,6 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private int pendingLocations = 0;
     private boolean loading = false;
 
-    // helpers
     private RasterTileMap tileMap;
     private MarkerLayer markerLayer;
     private CameraInputController cameraController;
@@ -74,11 +73,10 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private final Array<Geolocation> markersLR = new Array<>();
     private final Array<Geolocation> markersDB = new Array<>();
     private final Array<Geolocation> markersOnline = new Array<>();
-    //za dodajanje panjev...
     private MapAddHiveUi addHiveUi;
     private boolean isAddMode = false;
-    private Geolocation tempMarker = null; // To show where the user clicked
-    private MarkerLayer previewLayer; // Helper to draw the temp marker
+    private Geolocation tempMarker = null;
+    private MarkerLayer previewLayer;
 
     public RasterMapScreen(Projekt game) {
         this.game = game;

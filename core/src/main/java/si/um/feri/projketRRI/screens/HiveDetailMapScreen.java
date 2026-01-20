@@ -33,10 +33,9 @@ import si.um.feri.projketRRI.api.calls.model.HiveWeight;
 import si.um.feri.projketRRI.api.calls.model.Notes;
 import si.um.feri.projketRRI.api.calls.model.Weather;
 import si.um.feri.projketRRI.screens.detailScreenUi.HiveWeatherView;
-import si.um.feri.projketRRI.screens.detailScreenUi.SimulationCalculator;
-import si.um.feri.projketRRI.screens.detailScreenUi.SimulationDialog;
-import si.um.feri.projketRRI.screens.detailScreenUi.SimulationParams;
-import si.um.feri.projketRRI.screens.detailScreenUi.SimulationResultsGraphUI;
+import si.um.feri.projketRRI.screens.detailScreenUi.simulation.SimulationCalculator;
+import si.um.feri.projketRRI.screens.detailScreenUi.simulation.SimulationDialog;
+import si.um.feri.projketRRI.screens.detailScreenUi.simulation.SimulationResultsGraphUI;
 import si.um.feri.projketRRI.screens.detailScreenUi.hiveNotes.NotesUI;
 import si.um.feri.projketRRI.screens.detailScreenUi.hiveInfo.HiveInfoController;
 import si.um.feri.projketRRI.screens.detailScreenUi.hiveInfo.HiveInfoView;
@@ -47,7 +46,7 @@ import si.um.feri.projketRRI.utils.MapRasterTiles;
 import si.um.feri.projketRRI.utils.MarkerLayer;
 import si.um.feri.projketRRI.utils.RasterTileMap;
 import si.um.feri.projketRRI.utils.WeatherMath;
-import si.um.feri.projketRRI.screens.detailScreenUi.SimulationResultsGraphActor;
+import si.um.feri.projketRRI.screens.detailScreenUi.simulation.SimulationResultsGraphActor;
 
 public class HiveDetailMapScreen extends ScreenAdapter {
 

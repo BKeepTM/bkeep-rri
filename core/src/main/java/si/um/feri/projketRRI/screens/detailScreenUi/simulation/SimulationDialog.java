@@ -1,9 +1,8 @@
-package si.um.feri.projketRRI.screens.detailScreenUi;
+package si.um.feri.projketRRI.screens.detailScreenUi.simulation;
 
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.scenes.scene2d.Actor;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
-import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
 
@@ -76,8 +75,11 @@ public class SimulationDialog extends Dialog {
         populationSelect.setItems(SimulationCalculator.PopulationLevel.values());
         populationSelect.setSelected(SimulationCalculator.PopulationLevel.MEDIUM);
 
-        assert latest != null;
-        startWeightField = new TextField(String.valueOf(latest.weight), skin);
+        if (latest == null){
+            startWeightField = new TextField("0", skin);
+        }else{
+            startWeightField = new TextField(String.valueOf(latest.weight), skin);
+        }
 
         randomizeDailyCheck = new CheckBox(" Randomize daily temp/hum/light", skin);
         randomizeDailyCheck.setChecked(true);
