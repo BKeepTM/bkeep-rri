@@ -22,13 +22,21 @@ import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 import java.util.List;
 
-import si.um.feri.projketRRI.api.calls.ApiClient; // Ensure ApiClient is imported
+import si.um.feri.projketRRI.api.calls.ApiClient;
+import si.um.feri.projketRRI.api.calls.LocationService;
 import si.um.feri.projketRRI.api.calls.NotesService;
+import si.um.feri.projketRRI.api.calls.WeatherService;
 import si.um.feri.projketRRI.api.calls.model.Hive;
 import si.um.feri.projketRRI.api.calls.model.Location;
 import si.um.feri.projketRRI.Projekt;
 import si.um.feri.projketRRI.api.calls.model.HiveWeight;
 import si.um.feri.projketRRI.api.calls.model.Notes;
+import si.um.feri.projketRRI.api.calls.model.Weather;
+import si.um.feri.projketRRI.screens.detailScreenUi.HiveWeatherView;
+import si.um.feri.projketRRI.screens.detailScreenUi.SimulationCalculator;
+import si.um.feri.projketRRI.screens.detailScreenUi.SimulationDialog;
+import si.um.feri.projketRRI.screens.detailScreenUi.SimulationParams;
+import si.um.feri.projketRRI.screens.detailScreenUi.SimulationResultsGraphUI;
 import si.um.feri.projketRRI.screens.detailScreenUi.hiveNotes.NotesUI;
 import si.um.feri.projketRRI.screens.detailScreenUi.hiveInfo.HiveInfoController;
 import si.um.feri.projketRRI.screens.detailScreenUi.hiveInfo.HiveInfoView;
@@ -38,6 +46,8 @@ import si.um.feri.projketRRI.screens.detailScreenUi.hiveWeight.HiveWeightsGraphU
 import si.um.feri.projketRRI.utils.MapRasterTiles;
 import si.um.feri.projketRRI.utils.MarkerLayer;
 import si.um.feri.projketRRI.utils.RasterTileMap;
+import si.um.feri.projketRRI.utils.WeatherMath;
+import si.um.feri.projketRRI.screens.detailScreenUi.SimulationResultsGraphActor;
 
 public class HiveDetailMapScreen extends ScreenAdapter {
 
@@ -62,10 +72,16 @@ public class HiveDetailMapScreen extends ScreenAdapter {
     private NotesUI notesUI;
     private boolean lastOnline = false;
 
-    // --- NEW UI FOR DELETE ---
     private Stage uiStage;
-    private Skin skin;
-    // -------------------------
+    private Skin skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
+    private HiveWeatherView weatherView;
+    private Weather closestWeather;
+
+    private SimulationDialog simDialog;
+    private SimulationResultsGraphActor simulationGraphActor;
+
+    private SimulationResultsGraphUI simulationGraphUI;
+
 
     public HiveDetailMapScreen(Projekt game, Hive hive, Location location, Array<Geolocation> markers, Array<HiveWeight> hiveWeights) {
         this.game = game;
@@ -76,6 +92,9 @@ public class HiveDetailMapScreen extends ScreenAdapter {
 
     @Override
     public void show() {
+        skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
+        uiStage = new Stage(new ScreenViewport());
+
         Geolocation center = new Geolocation(location.latitude, location.longitude);
 
         tileMap = new RasterTileMap();
@@ -99,9 +118,7 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         cameraController = new CameraInputController(camera);
 
         String particlePath = null;
-        if ("online".equalsIgnoreCase(hive.status)) {
-            particlePath = "Particles/beeSmall.p";
-        }
+        if ("online".equalsIgnoreCase(hive.status)) particlePath = "Particles/beeSmall.p";
         lastOnline = "online".equalsIgnoreCase(hive.status);
 
         markerLayer = new MarkerLayer("Images/hive.png", particlePath);
@@ -111,38 +128,83 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         markers.add(new Geolocation(location.latitude, location.longitude));
         markerLayer.syncParticlesToMarkers(markers.size);
 
-        // --- Info View ---
         hiveInfoView = new HiveInfoView();
         hiveInfoController = new HiveInfoController(hiveInfoView);
         hiveInfoController.setHive(hive);
 
-        // --- Weights Graph ---
         weightsGraphUI = new HiveWeightsGraphUI();
         weightsGraphUI.setTitle(hive.name + " weight");
         weightsGraphUI.setWeights(hiveWeights);
 
-        // --- Notes UI ---
+        weatherView = new HiveWeatherView();
+        weatherView.setLoading("Loading closest weather...");
+
+        simulationGraphUI = new SimulationResultsGraphUI();
+        simulationGraphUI.setTitle(hive.name + " simulation");
+
+        simDialog = new SimulationDialog(skin,hiveWeights);
+
+        simDialog.setBaseWeather(
+            closestWeather != null ? closestWeather.temperature : null,
+            closestWeather != null ? (float) closestWeather.humidity : null
+        );
+
+        simDialog = new SimulationDialog(skin, hiveWeights);
+
+        simDialog.setBaseWeather(
+            closestWeather != null ? closestWeather.temperature : null,
+            closestWeather != null ? (float) closestWeather.humidity : null
+        );
+
+        simDialog.setListener(new SimulationDialog.Listener() {
+            @Override
+            public void onStart(SimulationCalculator.Params params) {
+                List<SimulationCalculator.DayResult> results =
+                    SimulationCalculator.run(params);
+
+                for (SimulationCalculator.DayResult r : results) System.out.println(r);
+
+                simulationGraphUI.setResults(results);
+            }
+
+            @Override
+            public void onCancel() {
+                System.out.println("[SIM] Simulation canceled");
+            }
+        });
+
+        weatherView.setOnSimulationClick(() -> simDialog.show(uiStage));
+
+
         notesUI = new NotesUI(hive, new NotesUI.NotesActions() {
-            @Override public void requestReloadNotes() {
+            @Override
+            public void requestReloadNotes() {
                 loadNotes();
             }
-            @Override public void showMessage(String msg) { System.out.println(msg); }
-            @Override public void showError(String msg) { System.err.println(msg); }
+
+            @Override
+            public void showMessage(String msg) {
+                System.out.println(msg);
+            }
+
+            @Override
+            public void showError(String msg) {
+                System.err.println(msg);
+            }
         });
         loadNotes();
 
-        // --- NEW: DELETE UI SETUP ---
         setupDeleteUi();
-        // ----------------------------
 
         InputMultiplexer mux = new InputMultiplexer();
 
-        // Add the Delete UI stage to input
         mux.addProcessor(uiStage);
 
+        mux.addProcessor(weatherView.getStage());
         mux.addProcessor(notesUI.getStage());
         mux.addProcessor(weightsGraphUI.getStage());
         mux.addProcessor(hiveInfoView.getStage());
+        mux.addProcessor(simulationGraphUI.getStage());
 
         mux.addProcessor(new InputAdapter() {
             @Override
@@ -151,7 +213,6 @@ public class HiveDetailMapScreen extends ScreenAdapter {
                 return true;
             }
         });
-
         mux.addProcessor(new GestureDetector(cameraController));
 
         mux.addProcessor(new InputAdapter() {
@@ -166,19 +227,22 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         });
 
         Gdx.input.setInputProcessor(mux);
+
+
+        loadClosestWeatherForHive();
     }
 
-    // --- Helper to setup Delete Button ---
+
     private void setupDeleteUi() {
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
+        skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
         uiStage = new Stage(new ScreenViewport());
 
         Table root = new Table();
         root.setFillParent(true);
-        root.bottom().right().pad(10); // Position Top Right
+        root.bottom().right().pad(10);
 
         TextButton deleteBtn = new TextButton("Remove Hive", skin);
-        deleteBtn.setColor(Color.RED); // Make it red for warning
+        deleteBtn.setColor(Color.RED);
 
         deleteBtn.addListener(new ChangeListener() {
             @Override
@@ -202,12 +266,11 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         };
         dialog.text("Are you sure you want to delete this hive?\nThis cannot be undone.");
         dialog.button("Cancel", false);
-        dialog.button("Delete", true); // Returns true when clicked
+        dialog.button("Delete", true);
         dialog.show(uiStage);
     }
 
     private void performDelete() {
-        // Run network call on background thread
         new Thread(() -> {
             try {
                 boolean success = ApiClient.removeHive(hive.id);
@@ -215,10 +278,8 @@ public class HiveDetailMapScreen extends ScreenAdapter {
                 Gdx.app.postRunnable(() -> {
                     if (success) {
                         Gdx.app.log("HIVE", "Hive removed successfully.");
-                        // Navigate back to the main map
                         game.setScreen(new RasterMapScreen(game));
                     } else {
-                        // Show error if needed
                         Gdx.app.log("HIVE", "Failed to remove hive.");
                     }
                 });
@@ -229,15 +290,17 @@ public class HiveDetailMapScreen extends ScreenAdapter {
             }
         }).start();
     }
-    // ------------------------------------
 
     private void loadNotes() {
         notesUI.setLoading(true);
         NotesService.loadNotesForHive(hive.id, new NotesService.NotesCallback() {
-            @Override public void onSuccess(List<Notes> notes) {
+            @Override
+            public void onSuccess(List<Notes> notes) {
                 notesUI.setNotes(notes, hive.id);
             }
-            @Override public void onError(String message) {
+
+            @Override
+            public void onError(String message) {
                 notesUI.setError(message);
             }
         });
@@ -252,8 +315,8 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         float vw = camera.viewportWidth * camera.zoom;
         float vh = camera.viewportHeight * camera.zoom;
 
-        camera.position.x = MathUtils.clamp(camera.position.x, vw/2f, mapW - vw/2f);
-        camera.position.y = MathUtils.clamp(camera.position.y, vh/2f, mapH - vh/2f);
+        camera.position.x = MathUtils.clamp(camera.position.x, vw / 2f, mapW - vw / 2f);
+        camera.position.y = MathUtils.clamp(camera.position.y, vh / 2f, mapH - vh / 2f);
     }
 
     @Override
@@ -281,15 +344,107 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         markerLayer.draw(camera, tileMap.getBeginTile(), markers, delta);
         hiveInfoView.render();
         weightsGraphUI.render();
+        weatherView.render();
         notesUI.render();
+        simulationGraphUI.render();
 
-        // --- Render the Delete UI ---
         if (uiStage != null) {
             uiStage.act(delta);
             uiStage.draw();
         }
-        // ----------------------------
     }
+
+    private void loadClosestWeatherForHive() {
+        weatherView.setLoading("Loading closest weather...");
+
+        LocationService.loadLocation(hive.id_location, new LocationService.LocationCallback() {
+            @Override
+            public void onSuccess(Location hiveLoc) {
+
+                WeatherService.loadAll(new WeatherService.WeatherListCallback() {
+                    @Override
+                    public void onSuccess(com.badlogic.gdx.utils.Array<Weather> weathers) {
+
+                        if (weathers == null || weathers.size == 0) {
+                            weatherView.setError("No weather stations.");
+                            return;
+                        }
+
+                        com.badlogic.gdx.utils.IntMap<Location> stationLocs = new com.badlogic.gdx.utils.IntMap<>();
+
+                        com.badlogic.gdx.utils.IntSet ids = new com.badlogic.gdx.utils.IntSet();
+                        for (Weather w : weathers) ids.add(w.id_location);
+
+                        final int total = ids.size;
+                        final int[] remaining = {total};
+
+                        if (total == 0) {
+                            weatherView.setError("No station locations.");
+                            return;
+                        }
+
+                        for (com.badlogic.gdx.utils.IntSet.IntSetIterator it = ids.iterator(); it.hasNext; ) {
+                            int id = it.next();
+
+                            LocationService.loadLocation(id, new LocationService.LocationCallback() {
+                                @Override
+                                public void onSuccess(Location loc) {
+                                    stationLocs.put(loc.id, loc);
+                                    remaining[0]--;
+
+                                    if (remaining[0] == 0) {
+                                        Weather closest = WeatherMath.findClosestWeather(hiveLoc, weathers, stationLocs);
+
+                                        WeatherMath.logNearestStations(hiveLoc, weathers, stationLocs, 5);
+
+                                        closestWeather = closest;
+                                        weatherView.setWeather(closestWeather);
+
+                                        if (simDialog != null && closestWeather != null) {
+                                            simDialog.setBaseWeather(
+                                                closestWeather.temperature,
+                                                (float) closestWeather.humidity
+                                            );
+                                        }
+                                    }
+                                }
+
+                                @Override
+                                public void onError(String message) {
+                                    remaining[0]--;
+
+                                    if (remaining[0] == 0) {
+                                        Weather closest = WeatherMath.findClosestWeather(hiveLoc, weathers, stationLocs);
+
+                                        closestWeather = closest;
+                                        weatherView.setWeather(closestWeather);
+
+                                        if (simDialog != null && closestWeather != null) {
+                                            simDialog.setBaseWeather(
+                                                closestWeather.temperature,
+                                                (float) closestWeather.humidity
+                                            );
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        weatherView.setError(message);
+                    }
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                weatherView.setError("Hive location failed: " + message);
+            }
+        });
+    }
+
 
     @Override
     public void resize(int width, int height) {
@@ -297,6 +452,9 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         if (weightsGraphUI != null) weightsGraphUI.resize(width, height);
         if (notesUI != null) notesUI.resize(width, height);
         if (uiStage != null) uiStage.getViewport().update(width, height, true);
+        if (weatherView != null) weatherView.resize(width, height);
+        simulationGraphUI.resize(width, height);
+
     }
 
     @Override
@@ -308,5 +466,7 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         if (tileMap != null) tileMap.dispose();
         if (uiStage != null) uiStage.dispose();
         if (skin != null) skin.dispose();
+        if (weatherView != null) weatherView.dispose();
+        simulationGraphUI.dispose();
     }
 }

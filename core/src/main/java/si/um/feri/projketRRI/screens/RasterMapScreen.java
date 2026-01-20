@@ -388,7 +388,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     }
 
     private void clampCameraToMap() {
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.1f, 2f);
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.3f, 2f);
 
         float mapPixelWidth = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
         float mapPixelHeight = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
@@ -415,18 +415,15 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         camera.unproject(world);
 
         if (isAddMode) {
-            // Calculate Lat/Lon from screen click
             Geolocation g = getGeolocationFromPixel(
                 world.x, world.y
             );
 
-            // 1. Update the UI
             addHiveUi.updateCoordinates(g.lat, g.lng);
 
-            // 2. Set the visual marker
             tempMarker = g;
 
-            return true; // Consume the tap so we don't open other hives
+            return true;
         }
 
         float hitRadius = 40f;
@@ -492,30 +489,20 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         if (addHiveUi != null) addHiveUi.dispose();
         if (tileMap != null) tileMap.dispose();
     }
-    //helper za shit
-    private Geolocation getGeolocationFromPixel(float worldX, float worldY) {
-        // 1. Setup constants strictly from MapRasterTiles
-        // Ensure these match your MapRasterTiles class (usually 512)
-        double tileSize = si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
-        double zoomFactor = Math.pow(2, Constants.ZOOM); // Use the current map zoom level
 
-        // 2. Calculate Global Pixel X (Standard)
-        // Global X = (Start Tile X * Size) + Click Offset X
+    private Geolocation getGeolocationFromPixel(float worldX, float worldY) {
+        double tileSize = si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
+        double zoomFactor = Math.pow(2, Constants.ZOOM);
+
         double globalPixelX = (tileMap.getBeginTile().x * tileSize) + worldX;
 
-        // 3. Calculate Global Pixel Y (Inverted)
-        // LibGDX World Y is 0 at Bottom. OSM Global Pixel Y is 0 at Top.
-        // We must subtract the World Y from the "Bottom" of the rendered grid to get the offset from the Top.
-        // The bottom of the grid in Global Pixels is: (Start Tile Y + Num Tiles) * Size
         double mapHeightTiles = Constants.NUM_TILES;
         double globalPixelY = ((tileMap.getBeginTile().y + mapHeightTiles) * tileSize) - worldY;
 
-        // 4. Normalize (0.0 to 1.0)
         double mapSize = tileSize * zoomFactor;
         double normalizedX = globalPixelX / mapSize;
         double normalizedY = globalPixelY / mapSize;
 
-        // 5. Mercator Reverse Projection
         double lon = normalizedX * 360.0 - 180.0;
         double n = Math.PI - 2.0 * Math.PI * normalizedY;
         double lat = Math.toDegrees(Math.atan(0.5 * (Math.exp(n) - Math.exp(-n))));

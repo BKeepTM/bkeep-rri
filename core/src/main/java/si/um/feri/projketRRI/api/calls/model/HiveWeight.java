@@ -12,5 +12,5 @@ public class HiveWeight {
     @SerializedName("id_hive")
     public int idHive;
 
-    public HiveWeight() {} // Gson needs no-arg constructor
+    public HiveWeight() {}
 }
