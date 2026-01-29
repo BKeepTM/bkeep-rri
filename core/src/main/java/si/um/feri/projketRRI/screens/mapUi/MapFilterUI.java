@@ -1,13 +1,13 @@
 package si.um.feri.projketRRI.screens.mapUi;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Actor;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Disposable;
-import com.badlogic.gdx.utils.viewport.FitViewport;
-import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.badlogic.gdx.scenes.scene2d.ui.Cell;
+import com.badlogic.gdx.scenes.scene2d.ui.Value;
 
 public class MapFilterUI implements Disposable {
 
@@ -18,11 +18,11 @@ public class MapFilterUI implements Disposable {
         void onFilterChanged(StatusFilter status, TypeFilter type);
     }
 
-    private final Stage stage;
     private final Skin skin;
 
     private final Table root;
     private final Table panel;
+    private Cell<?> panelCell;
 
     private final TextButton toggleBtn;
     private final SelectBox<String> statusSelect;
@@ -30,24 +30,20 @@ public class MapFilterUI implements Disposable {
     private final TextButton clearBtn;
 
     private boolean panelVisible = true;
-
     private FilterListener listener;
 
-    public MapFilterUI() {
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
-        stage = new Stage(new FitViewport(1200, 1200));
+    public MapFilterUI(Skin skin) {
+        this.skin = skin;
 
-        root = new Table();
-        root.setFillParent(true);
-        root.top().right().pad(12);
-        root.padTop(120);
+        root = new Table(); // component root (NOT fill parent)
 
         toggleBtn = new TextButton("Hide Filters", skin);
 
         panel = new Table(skin);
-        panel.background("default-round");
+        panel.setBackground("default-round");
         panel.pad(10);
 
+        // --- Build panel contents ---
         Label title = new Label("Map Filters", skin);
         title.setColor(Color.WHITE);
         title.setFontScale(1f);
@@ -68,9 +64,6 @@ public class MapFilterUI implements Disposable {
 
         clearBtn = new TextButton("Clear", skin);
 
-        // Layout
-        root.add(toggleBtn).right().row();
-
         panel.add(title).center().colspan(2).row();
         panel.row().padTop(8);
 
@@ -84,10 +77,15 @@ public class MapFilterUI implements Disposable {
 
         panel.add(clearBtn).right().colspan(2).row();
 
+        root.add(toggleBtn).right().row();
         root.row().padTop(8);
-        root.add(panel).right();
 
-        stage.addActor(root);
+        panelCell = root.add(panel).right();
+
+        panel.setVisible(true);
+        panel.setTouchable(Touchable.enabled);
+        panelCell.height(Value.prefHeight);
+        panelCell.padTop(8);
 
         wireEvents();
     }
@@ -95,16 +93,23 @@ public class MapFilterUI implements Disposable {
     private void wireEvents() {
         toggleBtn.addListener(new ChangeListener() {
             @Override
-            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+            public void changed(ChangeEvent event, Actor actor) {
                 panelVisible = !panelVisible;
+
                 panel.setVisible(panelVisible);
+                panel.setTouchable(panelVisible ? Touchable.enabled : Touchable.disabled);
+
+                panelCell.height(panelVisible ? Value.prefHeight : Value.zero);
+                panelCell.padTop(panelVisible ? 8 : 0);
+
+                root.invalidateHierarchy();
                 toggleBtn.setText(panelVisible ? "Hide Filters" : "Show Filters");
             }
         });
 
         ChangeListener notify = new ChangeListener() {
             @Override
-            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+            public void changed(ChangeEvent event, Actor actor) {
                 fireFilterChanged();
             }
         };
@@ -114,7 +119,7 @@ public class MapFilterUI implements Disposable {
 
         clearBtn.addListener(new ChangeListener() {
             @Override
-            public void changed(ChangeEvent event, com.badlogic.gdx.scenes.scene2d.Actor actor) {
+            public void changed(ChangeEvent event, Actor actor) {
                 statusSelect.setSelected("All");
                 typeSelect.setSelected("All");
                 fireFilterChanged();
@@ -146,22 +151,11 @@ public class MapFilterUI implements Disposable {
         return TypeFilter.ALL;
     }
 
-    public Stage getStage() {
-        return stage;
-    }
-
-    public void resize(int w, int h) {
-        stage.getViewport().update(w, h, true);
-    }
-
-    public void render() {
-        stage.act(Gdx.graphics.getDeltaTime());
-        stage.draw();
+    public Table getRoot() {
+        return root;
     }
 
     @Override
     public void dispose() {
-        stage.dispose();
-        skin.dispose();
     }
 }
