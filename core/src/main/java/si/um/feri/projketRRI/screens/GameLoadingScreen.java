@@ -22,7 +22,9 @@ import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 import si.um.feri.projketRRI.Projekt;
 import si.um.feri.projketRRI.utils.Geolocation;
@@ -41,7 +43,7 @@ public class GameLoadingScreen extends ScreenAdapter {
     private SpriteBatch batch;
     private Texture white;
 
-    private volatile float progress = 0f; // 0..1
+    private volatile float progress = 0f;
     private volatile String status = "Preparing...";
     private volatile boolean finished = false;
 
@@ -93,6 +95,11 @@ public class GameLoadingScreen extends ScreenAdapter {
     private float spawnCooldown = 0f;
     private float minSpawnGap = 0.25f;
     private Texture rockTex, waspTex;
+    private Viewport viewport;
+
+    static final float WORLD_WIDTH  = 1200;
+    static final float WORLD_HEIGHT = 1200;
+
 
 
     public GameLoadingScreen(Projekt game, Geolocation center, int zoom, int numTiles, Runnable onDone) {
@@ -125,7 +132,11 @@ public class GameLoadingScreen extends ScreenAdapter {
     @Override
     public void show() {
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        viewport = new FitViewport(WORLD_WIDTH, WORLD_HEIGHT, camera);
+
+        viewport.apply(true);
+        camera.position.set(WORLD_WIDTH / 2f, WORLD_HEIGHT / 2f, 0);
+        camera.update();
 
         batch = new SpriteBatch();
         white = makeWhiteTexture();
@@ -135,11 +146,9 @@ public class GameLoadingScreen extends ScreenAdapter {
         waspTex = new Texture(Gdx.files.internal("Images/wasp.png"));
         rockTex   = new Texture(Gdx.files.internal("Images/rock.png"));
 
-        // optional
-        // groundTex = new Texture(Gdx.files.internal("Images/ground.png"));
 
         skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
-        uiStage = new Stage(new ScreenViewport());
+        uiStage = new Stage(new FitViewport(WORLD_WIDTH, WORLD_HEIGHT));
 
         Table top = new Table();
         top.setFillParent(true);
@@ -253,6 +262,7 @@ public class GameLoadingScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        viewport.apply();
         delta = Math.min(delta, 1f / 30f);
 
         updateGame(delta);
@@ -510,7 +520,8 @@ public class GameLoadingScreen extends ScreenAdapter {
 
     @Override
     public void resize(int width, int height) {
-        camera.setToOrtho(false, width, height);
+        viewport.update(width, height, true);
+        uiStage.getViewport().update(width, height, true);
     }
 
     @Override

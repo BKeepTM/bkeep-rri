@@ -8,6 +8,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 public class MapAddHiveUi implements Disposable {
@@ -40,7 +41,7 @@ public class MapAddHiveUi implements Disposable {
 
     public MapAddHiveUi() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        stage = new Stage(new ScreenViewport());
+        stage = new Stage(new FitViewport(1200, 1200));
 
         root = new Table();
         root.setFillParent(true);
@@ -198,7 +199,6 @@ public class MapAddHiveUi implements Disposable {
     public Stage getStage() { return stage; }
     public void resize(int w, int h) {
         stage.getViewport().update(w, h, true);
-
     }
     public void render() {
         stage.act(Gdx.graphics.getDeltaTime());
