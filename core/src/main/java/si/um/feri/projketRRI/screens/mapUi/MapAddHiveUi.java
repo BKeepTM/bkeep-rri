@@ -1,15 +1,15 @@
 package si.um.feri.projketRRI.screens.mapUi;
 
-import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.scenes.scene2d.Actor;
-import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.Touchable;
+import com.badlogic.gdx.scenes.scene2d.actions.Actions;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
-import com.badlogic.gdx.utils.viewport.FitViewport;
-import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.badlogic.gdx.scenes.scene2d.ui.Cell;
+import com.badlogic.gdx.scenes.scene2d.ui.Value;
 
 public class MapAddHiveUi implements Disposable {
 
@@ -18,10 +18,11 @@ public class MapAddHiveUi implements Disposable {
         void onSave(String name, String type, String status, String locationDesc);
     }
 
-    private final Stage stage;
     private final Skin skin;
+
     private final Table root;
     private final Table panel;
+    private Cell<?> panelCell;
 
     private final TextButton toggleBtn;
 
@@ -29,7 +30,7 @@ public class MapAddHiveUi implements Disposable {
     private final TextField nameField;
     private final SelectBox<String> typeSelect;
     private final SelectBox<String> statusSelect;
-    private final TextField locDescField; // For "location" string (e.g. "Orchard")
+    private final TextField locDescField;
 
     // Read-only Coordinate displays
     private final Label latValueLbl;
@@ -39,26 +40,24 @@ public class MapAddHiveUi implements Disposable {
     private boolean isAddingMode = false;
     private AddHiveListener listener;
 
-    public MapAddHiveUi() {
-        skin = new Skin(Gdx.files.internal("uiskin.json"));
-        stage = new Stage(new FitViewport(1200, 1200));
+
+    public MapAddHiveUi(Skin skin) {
+        this.skin = skin;
 
         root = new Table();
-        root.setFillParent(true);
-        root.bottom().right().pad(20);
 
-        // Toggle Button
         toggleBtn = new TextButton("Add New Hive", skin);
 
         // Form Panel
         panel = new Table(skin);
-        panel.background("default-round"); // Ensure this drawable exists in uiskin
+        panel.setBackground("default-round");
         panel.pad(15);
         panel.setVisible(false);
+        panel.setTouchable(Touchable.disabled);
 
         // --- Build Form ---
         Label title = new Label("New Hive Details", skin);
-        title.setFontScale(1.1f);
+        title.setFontScale(1f);
         title.setColor(Color.YELLOW);
 
         nameField = new TextField("", skin);
@@ -89,9 +88,8 @@ public class MapAddHiveUi implements Disposable {
         // Layout Form
         panel.add(title).colspan(2).center().padBottom(10).row();
 
-        // Instruction
         Label hint = new Label("Tap map to set location", skin);
-        hint.setFontScale(0.8f);
+        hint.setFontScale(1f);
         hint.setColor(Color.LIGHT_GRAY);
         panel.add(hint).colspan(2).center().padBottom(10).row();
 
@@ -109,17 +107,20 @@ public class MapAddHiveUi implements Disposable {
         buttons.add(cancelBtn).width(90);
         panel.add(buttons).colspan(2).row();
 
-        // Main Layout
-        root.add(panel).width(300).row();
-        root.add(toggleBtn).right().padTop(10);
+        root.add(toggleBtn).right().row();
+        root.row().padTop(8);
 
-        stage.addActor(root);
+        panelCell = root.add(panel).width(300).right(); // keep cell reference
 
-        // Event Listeners
+        // Start collapsed (so it doesn't reserve space when hidden)
+        panelCell.height(0);
+        panelCell.padTop(0);
+
+        // --- Event Listeners ---
         toggleBtn.addListener(new ChangeListener() {
             @Override
             public void changed(ChangeEvent event, Actor actor) {
-                setAddingMode(true);
+                setAddingMode(!isAddingMode);
             }
         });
 
@@ -146,12 +147,27 @@ public class MapAddHiveUi implements Disposable {
 
     private void setAddingMode(boolean active) {
         this.isAddingMode = active;
+
+        panel.clearActions();
+
         panel.setVisible(active);
-        toggleBtn.setVisible(!active); // Hide "Add" button when form is open
+        panel.setTouchable(active ? Touchable.enabled : Touchable.disabled);
+
+        panelCell.height(active ? Value.prefHeight : Value.zero);
+        panelCell.padTop(active ? 8 : 0);
+
+        root.invalidateHierarchy();
+
+        if (active) {
+            panel.getColor().a = 0f;
+            panel.addAction(Actions.fadeIn(0.2f));
+        }
+
+        toggleBtn.setText(active ? "Close" : "Add New Hive");
         errorLbl.setText("");
 
         if (!active) {
-            // Clear fields on cancel
+            // Clear fields on close/cancel
             nameField.setText("");
             locDescField.setText("");
             latValueLbl.setText("-");
@@ -164,11 +180,11 @@ public class MapAddHiveUi implements Disposable {
     public void updateCoordinates(double lat, double lng) {
         latValueLbl.setText(String.format("%.6f", lat));
         lngValueLbl.setText(String.format("%.6f", lng));
-        errorLbl.setText(""); // Clear error if they picked a point
+        errorLbl.setText("");
     }
 
     private void doSave() {
-        if (latValueLbl.getText().toString().equals("-")) {
+        if ("-".equals(latValueLbl.getText().toString())) {
             errorLbl.setText("Please tap the map to select a location!");
             return;
         }
@@ -196,13 +212,11 @@ public class MapAddHiveUi implements Disposable {
         this.listener = listener;
     }
 
-    public Stage getStage() { return stage; }
-    public void resize(int w, int h) {
-        stage.getViewport().update(w, h, true);
+    public Table getRoot() {
+        return root;
     }
-    public void render() {
-        stage.act(Gdx.graphics.getDeltaTime());
-        stage.draw();
+
+    @Override
+    public void dispose() {
     }
-    @Override public void dispose() { stage.dispose(); skin.dispose(); }
 }

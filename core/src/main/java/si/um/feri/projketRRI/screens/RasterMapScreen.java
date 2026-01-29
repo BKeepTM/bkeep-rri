@@ -4,17 +4,25 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.InputMultiplexer;
 import com.badlogic.gdx.ScreenAdapter;
+import com.badlogic.gdx.graphics.Color;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.input.GestureDetector;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.scenes.scene2d.Stage;
+import com.badlogic.gdx.scenes.scene2d.ui.Label;
+import com.badlogic.gdx.scenes.scene2d.ui.Skin;
+import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.IntMap;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.utils.viewport.ExtendViewport;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.ScreenViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
+import com.kotcrab.vis.ui.VisUI;
 
 import si.um.feri.projketRRI.Projekt;
 import si.um.feri.projketRRI.api.calls.ApiClient;
@@ -81,6 +89,10 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private Geolocation tempMarker = null;
     private MarkerLayer previewLayer;
     private Viewport viewport;
+    private Stage uiStage;
+    private Skin uiSkin;
+
+
 
     public RasterMapScreen(Projekt game) {
         this.game = game;
@@ -120,8 +132,26 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
         InputMultiplexer mux = new InputMultiplexer();
 
-        filterUI = new MapFilterUI();
-        addHiveUI = new MapAddHiveUi();
+        if (!VisUI.isLoaded()) VisUI.load();
+
+        //uiSkin = VisUI.getSkin();
+        uiSkin = new Skin(Gdx.files.internal("uiskin.json"));
+
+        uiStage = new Stage(new ScreenViewport());
+        filterUI = new MapFilterUI(uiSkin);
+        addHiveUi = new MapAddHiveUi(uiSkin);
+
+        Table hud = new Table();
+        hud.setFillParent(true);
+        hud.top().right().pad(20);
+        hud.padTop(120);
+
+        hud.add(filterUI.getRoot()).right().row();
+        hud.row().padTop(10);
+        hud.add(addHiveUi.getRoot()).right().row();
+
+        uiStage.addActor(hud);
+
 
         filterUI.setFilterListener((status, type) -> {
             statusFilter = status;
@@ -133,14 +163,12 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
                 particlesOnlineLayer.syncParticlesToMarkers(markersOnline.size);
             }
         });
-        addHiveUi = new MapAddHiveUi();
+
         addHiveUi.setListener(new MapAddHiveUi.AddHiveListener() {
             @Override
             public void onModeChanged(boolean mode) {
                 isAddMode = mode;
-                if (!mode) {
-                    tempMarker = null;
-                }
+                if (!mode) tempMarker = null;
             }
 
             @Override
@@ -148,30 +176,31 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
                 if (tempMarker == null) return;
 
                 Gdx.app.log("API", "Creating hive...");
-                ApiClient.createHive(name, type, status, locationDesc, tempMarker.lat, tempMarker.lng, new ApiClient.HiveCallback() {
-                    @Override
-                    public void onSuccess() {
-                        Gdx.app.postRunnable(() -> {
-                            Gdx.app.log("API", "Success!");
-                            addHiveUi.reset(); // Close form
-                            tempMarker = null; // Remove temp marker
-                            loadHivesAndLocations(); // Refresh map
-                        });
-                    }
+                ApiClient.createHive(name, type, status, locationDesc, tempMarker.lat, tempMarker.lng,
+                    new ApiClient.HiveCallback() {
+                        @Override
+                        public void onSuccess() {
+                            Gdx.app.postRunnable(() -> {
+                                Gdx.app.log("API", "Success!");
+                                addHiveUi.reset();
+                                tempMarker = null;
+                                loadHivesAndLocations();
+                            });
+                        }
 
-                    @Override
-                    public void onError(String message) {
-                        Gdx.app.postRunnable(() -> {
-                            Gdx.app.log("API", "Error: " + message);
-                        });
+                        @Override
+                        public void onError(String message) {
+                            Gdx.app.postRunnable(() -> {
+                                Gdx.app.log("API", "Error: " + message);
+                            });
+                        }
                     }
-                });
+                );
             }
         });
-        mux.addProcessor(filterUI.getStage());
-        mux.addProcessor(addHiveUi.getStage());
-        mux.addProcessor(new GestureDetector(this));
+        mux.addProcessor(uiStage);
 
+        mux.addProcessor(new GestureDetector(this));
         mux.addProcessor(new GestureDetector(cameraController));
 
         mux.addProcessor(new InputAdapter() {
@@ -208,8 +237,8 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
             previewLayer.draw(camera, tileMap.getBeginTile(), tempArr, delta);
         }
-        if (filterUI != null) filterUI.render();
-        if (addHiveUi != null) addHiveUi.render();
+        uiStage.act(Gdx.graphics.getDeltaTime());
+        uiStage.draw();
     }
 
     private void loadHivesAndLocations() {
@@ -465,8 +494,10 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     public void resize(int width, int height) {
         viewport.update(width, height, true);
         camera.update();
-        if (filterUI != null) filterUI.resize(width, height);
-        if (addHiveUI != null) addHiveUI.resize(width, height);
+
+        if (uiStage != null) {
+            uiStage.getViewport().update(width, height, true);
+        }
     }
 
 
@@ -490,6 +521,8 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
         if (markerLayer != null) markerLayer.dispose();
         if (addHiveUi != null) addHiveUi.dispose();
         if (tileMap != null) tileMap.dispose();
+        if (uiStage != null) uiStage.dispose();
+        if (uiSkin != null) uiSkin.dispose();
     }
 
     private Geolocation getGeolocationFromPixel(float worldX, float worldY) {
