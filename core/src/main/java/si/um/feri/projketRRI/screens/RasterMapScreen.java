@@ -12,6 +12,9 @@ import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.IntMap;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 import si.um.feri.projketRRI.Projekt;
 import si.um.feri.projketRRI.api.calls.ApiClient;
@@ -77,6 +80,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     private boolean isAddMode = false;
     private Geolocation tempMarker = null;
     private MarkerLayer previewLayer;
+    private Viewport viewport;
 
     public RasterMapScreen(Projekt game) {
         this.game = game;
@@ -85,10 +89,11 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     @Override
     public void show() {
         camera = new OrthographicCamera();
-        camera.setToOrtho(false, Constants.MAP_WIDTH, Constants.MAP_HEIGHT);
+
+        viewport = new FitViewport(Constants.MAP_WIDTH, Constants.MAP_HEIGHT, camera);
+
+        viewport.apply(true);
         camera.position.set(Constants.MAP_WIDTH / 2f, Constants.MAP_HEIGHT / 2f, 0);
-        camera.viewportWidth = Constants.MAP_WIDTH / 2f;
-        camera.viewportHeight = Constants.MAP_HEIGHT / 2f;
         camera.zoom = 2f;
         camera.update();
 
@@ -134,7 +139,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
             public void onModeChanged(boolean mode) {
                 isAddMode = mode;
                 if (!mode) {
-                    tempMarker = null; // Clear preview if canceled
+                    tempMarker = null;
                 }
             }
 
@@ -142,7 +147,6 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
             public void onSave(String name, String type, String status, String locationDesc) {
                 if (tempMarker == null) return;
 
-                // Call API
                 Gdx.app.log("API", "Creating hive...");
                 ApiClient.createHive(name, type, status, locationDesc, tempMarker.lat, tempMarker.lng, new ApiClient.HiveCallback() {
                     @Override
@@ -159,7 +163,6 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
                     public void onError(String message) {
                         Gdx.app.postRunnable(() -> {
                             Gdx.app.log("API", "Error: " + message);
-                            // You could add a showError method to MapAddHiveUi to display this
                         });
                     }
                 });
@@ -186,6 +189,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
     @Override
     public void render(float delta) {
+        viewport.apply();
         ScreenUtils.clear(0, 0, 0, 1);
 
         clampCameraToMap();
@@ -330,7 +334,6 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
             if (isOnline(hive.status)) markersOnline.add(g);
         }
 
-        // particles only for online
         particlesOnlineLayer.syncParticlesToMarkers(markersOnline.size);
     }
 
@@ -386,7 +389,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
     }
 
     private void clampCameraToMap() {
-        camera.zoom = MathUtils.clamp(camera.zoom, 0.3f, 2f);
+        camera.zoom = MathUtils.clamp(camera.zoom, 0.2f, 1f);
 
         float mapPixelWidth = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
         float mapPixelHeight = Constants.NUM_TILES * si.um.feri.projketRRI.utils.MapRasterTiles.TILE_SIZE;
@@ -460,6 +463,7 @@ public class RasterMapScreen extends ScreenAdapter implements GestureDetector.Ge
 
     @Override
     public void resize(int width, int height) {
+        viewport.update(width, height, true);
         camera.update();
         if (filterUI != null) filterUI.resize(width, height);
         if (addHiveUI != null) addHiveUI.resize(width, height);

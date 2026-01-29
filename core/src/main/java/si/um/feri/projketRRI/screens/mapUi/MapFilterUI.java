@@ -6,6 +6,7 @@ import com.badlogic.gdx.scenes.scene2d.Stage;
 import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Disposable;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 public class MapFilterUI implements Disposable {
@@ -34,7 +35,7 @@ public class MapFilterUI implements Disposable {
 
     public MapFilterUI() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        stage = new Stage(new ScreenViewport());
+        stage = new Stage(new FitViewport(1200, 1200));
 
         root = new Table();
         root.setFillParent(true);

@@ -18,7 +18,9 @@ import com.badlogic.gdx.scenes.scene2d.ui.TextButton;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ScreenUtils;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
 
 import java.util.List;
 
@@ -77,9 +79,10 @@ public class HiveDetailMapScreen extends ScreenAdapter {
     private Weather closestWeather;
 
     private SimulationDialog simDialog;
-    private SimulationResultsGraphActor simulationGraphActor;
 
     private SimulationResultsGraphUI simulationGraphUI;
+
+    private Viewport viewport;
 
 
     public HiveDetailMapScreen(Projekt game, Hive hive, Location location, Array<Geolocation> markers, Array<HiveWeight> hiveWeights) {
@@ -101,16 +104,13 @@ public class HiveDetailMapScreen extends ScreenAdapter {
         tileMap.setNumTiles(NUM_TILES_DETAIL);
         tileMap.rebuild(center);
 
+        float worldW = MapRasterTiles.TILE_SIZE * NUM_TILES_DETAIL;
+        float worldH = MapRasterTiles.TILE_SIZE * NUM_TILES_DETAIL;
+
         camera = new OrthographicCamera();
-        camera.setToOrtho(false,
-            MapRasterTiles.TILE_SIZE * NUM_TILES_DETAIL,
-            MapRasterTiles.TILE_SIZE * NUM_TILES_DETAIL
-        );
-        camera.position.set(
-            (MapRasterTiles.TILE_SIZE * NUM_TILES_DETAIL) / 2f,
-            (MapRasterTiles.TILE_SIZE * NUM_TILES_DETAIL) / 2f,
-            0
-        );
+        viewport = new FitViewport(worldW, worldH, camera);
+        viewport.apply(true);
+        camera.position.set(worldW / 2f, worldH / 2f, 0);
         camera.zoom = 1.0f;
         camera.update();
 
@@ -320,6 +320,7 @@ public class HiveDetailMapScreen extends ScreenAdapter {
 
     @Override
     public void render(float delta) {
+        viewport.apply();
         ScreenUtils.clear(0, 0, 0, 1);
         clampCameraToMap();
         camera.update();
@@ -447,6 +448,7 @@ public class HiveDetailMapScreen extends ScreenAdapter {
 
     @Override
     public void resize(int width, int height) {
+        viewport.update(width, height, true);
         if (hiveInfoView != null) hiveInfoView.resize(width, height);
         if (weightsGraphUI != null) weightsGraphUI.resize(width, height);
         if (notesUI != null) notesUI.resize(width, height);

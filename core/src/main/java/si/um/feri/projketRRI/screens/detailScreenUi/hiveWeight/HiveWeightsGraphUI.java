@@ -7,6 +7,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Skin;
 import com.badlogic.gdx.scenes.scene2d.ui.Table;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Disposable;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 import si.um.feri.projketRRI.api.calls.model.HiveWeight;
@@ -21,7 +22,8 @@ public class HiveWeightsGraphUI implements Disposable {
 
     public HiveWeightsGraphUI() {
         skin = new Skin(Gdx.files.internal("uiskin.json"));
-        stage = new Stage(new ScreenViewport());
+        stage = new Stage(new FitViewport(1200, 1200));
+
 
         Table root = new Table();
         root.setFillParent(true);

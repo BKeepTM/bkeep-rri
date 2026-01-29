@@ -8,6 +8,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.*;
 import com.badlogic.gdx.scenes.scene2d.utils.ChangeListener;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.Disposable;
+import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.ScreenViewport;
 
 import si.um.feri.projketRRI.api.calls.model.Hive;
@@ -44,7 +45,8 @@ public class HiveInfoView implements Disposable {
 
     public HiveInfoView() {
         this.skin = new Skin(Gdx.files.internal("ui/uiskin.json"));
-        this.stage = new Stage(new ScreenViewport());
+        this.stage = new Stage(new FitViewport(1200, 1200));
+
 
         Table root = new Table();
         root.setFillParent(true);
